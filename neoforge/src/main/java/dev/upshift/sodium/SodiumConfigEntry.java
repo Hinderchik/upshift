@@ -70,51 +70,39 @@ implements ConfigEntryPoint {
         if (!frameGens.contains((Object)config.frameGen)) {
             config.frameGen = frameGens.contains((Object)FrameGen.INTERNAL) ? FrameGen.INTERNAL : frameGens.get(0);
         }
-        ModOptionsBuilder modOptions = builder.registerOwnModOptions().setName("Upshift").addPage((PageBuilder)builder.createOptionPage().setName((Component)Component.translatable((String)"upshift.page.upscaling")).addOptionGroup(builder.createOptionGroup().setName((Component)Component.translatable((String)"upshift.group.profile")).addOption((OptionBuilder)builder.createIntegerOption(PROFILE_ID).setName((Component)Component.translatable((String)"upshift.option.profile")).setTooltip(index -> {
-            PerfProfile preset = PerfProfile.values()[SodiumConfigEntry.clamp(index, PerfProfile.values().length)];
-            return Component.literal((String)preset.note());
-        }).setDefaultValue(Integer.valueOf(PerfProfile.BALANCED.ordinal())).setRange(0, PerfProfile.values().length - 1, 1).setValueFormatter(index -> Component.literal((String)SodiumConfigEntry.profileLabel(PerfProfile.values()[SodiumConfigEntry.clamp(index, PerfProfile.values().length)]))).setBinding(index -> CpuTuner.get().apply(PerfProfile.values()[SodiumConfigEntry.clamp(index, PerfProfile.values().length)]), () -> config.profile.ordinal()).setStorageHandler(config::save).setImpact(OptionImpact.HIGH)).addOption((OptionBuilder)builder.createBooleanOption(DYNAMIC_ID).setName((Component)Component.translatable((String)"upshift.option.dynamic")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.dynamic")).setDefaultValue(Boolean.valueOf(true)).setBinding(value -> {
-            config.dynamicScale = value;
-        }, () -> config.dynamicScale).setStorageHandler(config::save).setImpact(OptionImpact.MEDIUM)).addOption((OptionBuilder)builder.createIntegerOption(TARGET_ID).setName((Component)Component.translatable((String)"upshift.option.target_fps")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.target_fps")).setDefaultValue(Integer.valueOf(60)).setRange(30, 300, 5).setValueFormatter(value -> Component.literal((String)(value + " fps"))).setBinding(value -> {
-            config.targetFps = value;
-        }, () -> config.targetFps).setStorageHandler(config::save).setImpact(OptionImpact.MEDIUM))).addOptionGroup(builder.createOptionGroup().setName((Component)Component.translatable((String)"upshift.group.upscaler")).addOption((OptionBuilder)builder.createIntegerOption(UPSCALER_ID).setName((Component)Component.translatable((String)"upshift.option.upscaler")).setTooltip((Component)Component.literal((String)report.gpu().describe())).setDefaultValue(Integer.valueOf(0)).setRange(0, Math.max(0, upscalers.size() - 1), 1).setValueFormatter(SodiumConfigEntry.names(upscalers, Upscaler::id)).setBinding(index -> {
-            config.upscaler = (Upscaler)((Object)((Object)upscalers.get(SodiumConfigEntry.clamp(index, upscalers.size()))));
-        }, () -> Math.max(0, upscalers.indexOf((Object)config.upscaler))).setStorageHandler(config::save).setImpact(OptionImpact.HIGH)).addOption((OptionBuilder)builder.createIntegerOption(QUALITY_ID).setName((Component)Component.translatable((String)"upshift.option.quality")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.quality")).setDefaultValue(Integer.valueOf(0)).setRange(0, Math.max(0, QualityMode.forUpscaler(config.upscaler).size() - 1), 1).setValueFormatter(index -> {
-            List<QualityMode> presets = QualityMode.forUpscaler(SodiumConfigEntry.currentUpscaler());
-            QualityMode mode = presets.get(SodiumConfigEntry.clamp(index, presets.size()));
-            return Component.literal((String)(mode.label() + "  " + Math.round(mode.scale() * 100.0f) + "%"));
-        }).setBinding(index -> {
-            List<QualityMode> presets = QualityMode.forUpscaler(SodiumConfigEntry.currentUpscaler());
-            config.applyQuality(presets.get(SodiumConfigEntry.clamp(index, presets.size())));
-        }, () -> config.qualityIndex(SodiumConfigEntry.currentUpscaler())).setStorageHandler(config::save).setImpact(OptionImpact.HIGH))).addOptionGroup(builder.createOptionGroup().setName((Component)Component.translatable((String)"upshift.group.resolution")).addOption((OptionBuilder)builder.createIntegerOption(CUSTOM_SCALE_ID).setName((Component)Component.translatable((String)"upshift.option.scale")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.scale")).setDefaultValue(Integer.valueOf(67)).setRange(25, 100, 1).setValueFormatter(SodiumConfigEntry.percent()).setBinding(value -> {
-            config.customScale = (float)value.intValue() / 100.0f;
-        }, () -> Math.round(config.renderScale() * 100.0f)).setStorageHandler(config::save).setImpact(OptionImpact.HIGH)).addOption((OptionBuilder)builder.createBooleanOption(FULL_EASU_ID).setName((Component)Component.translatable((String)"upshift.option.full_easu")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.full_easu")).setDefaultValue(Boolean.valueOf(false)).setBinding(value -> {
-            config.fastUpscale = value == false;
-        }, () -> !config.fastUpscale).setStorageHandler(config::save).setImpact(OptionImpact.MEDIUM)).addOption((OptionBuilder)builder.createIntegerOption(SHARPNESS_ID).setName((Component)Component.translatable((String)"upshift.option.sharpness")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.sharpness")).setDefaultValue(Integer.valueOf(0)).setRange(0, 200, 5).setValueFormatter(SodiumConfigEntry.stops()).setBinding(value -> {
-            config.sharpness = (float)value.intValue() / 100.0f;
-        }, () -> Math.round(config.sharpness * 100.0f)).setStorageHandler(config::save).setImpact(OptionImpact.LOW)).addOption((OptionBuilder)builder.createBooleanOption(Identifier.parse("upshift:sharpening_only")).setName((Component)Component.translatable((String)"upshift.option.sharpening_only")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.sharpening_only")).setDefaultValue(Boolean.valueOf(false)).setBinding(value -> {
-            config.sharpeningOnly = value;
-        }, () -> config.sharpeningOnly).setStorageHandler(config::save).setImpact(OptionImpact.MEDIUM))).addOptionGroup(builder.createOptionGroup().setName((Component)Component.translatable((String)"upshift.group.behaviour")).addOption((OptionBuilder)builder.createBooleanOption(AUTOFALLBACK_ID).setName((Component)Component.translatable((String)"upshift.option.auto_fallback")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.auto_fallback")).setDefaultValue(Boolean.valueOf(true)).setBinding(value -> {
-            config.autoFallback = value;
-        }, () -> config.autoFallback).setStorageHandler(config::save).setImpact(OptionImpact.LOW)).addOption((OptionBuilder)builder.createBooleanOption(EXPERIMENTAL_ID).setName((Component)Component.translatable((String)"upshift.option.experimental")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.experimental")).setDefaultValue(Boolean.valueOf(true)).setBinding(value -> {
-            config.allowExperimentalBackends = value;
-        }, () -> config.allowExperimentalBackends).setStorageHandler(() -> {
-            config.save();
-            Capabilities.invalidate();
-        }).setImpact(OptionImpact.MEDIUM)).addOption((OptionBuilder)builder.createBooleanOption(MENU_BOOST_ID).setName((Component)Component.translatable((String)"upshift.option.menu_boost")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.menu_boost")).setDefaultValue(Boolean.valueOf(true)).setBinding(value -> {
-            config.menuBoost = value;
-            if (value.booleanValue()) {
-                CpuTuner.get().dropMenuBlur();
-            }
-        }, () -> config.menuBoost).setStorageHandler(config::save).setImpact(OptionImpact.HIGH)).addOption((OptionBuilder)builder.createIntegerOption(OVERLAY_ID).setName((Component)Component.translatable((String)"upshift.option.overlay")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.overlay")).setDefaultValue(Integer.valueOf(OverlayMode.FULL.ordinal())).setRange(0, OverlayMode.values().length - 1, 1).setValueFormatter(index -> Component.literal((String)SodiumConfigEntry.overlayLabel(OverlayMode.values()[SodiumConfigEntry.clamp(index, OverlayMode.values().length)]))).setBinding(index -> {
-            config.overlay = OverlayMode.values()[SodiumConfigEntry.clamp(index, OverlayMode.values().length)];
-        }, () -> config.overlay.ordinal()).setStorageHandler(config::save).setImpact(OptionImpact.LOW)))).addPage((PageBuilder)builder.createOptionPage().setName((Component)Component.translatable((String)"upshift.page.frame_gen")).addOptionGroup(builder.createOptionGroup().setName((Component)Component.translatable((String)"upshift.group.frame_gen")).addOption((OptionBuilder)builder.createIntegerOption(FRAMEGEN_ID).setName((Component)Component.translatable((String)"upshift.option.frame_gen")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.frame_gen")).setDefaultValue(Integer.valueOf(0)).setRange(0, Math.max(0, frameGens.size() - 1), 1).setValueFormatter(SodiumConfigEntry.names(frameGens, FrameGen::id)).setBinding(index -> {
-            config.frameGen = (FrameGen)((Object)((Object)frameGens.get(SodiumConfigEntry.clamp(index, frameGens.size()))));
-        }, () -> Math.max(0, frameGens.indexOf((Object)config.frameGen))).setStorageHandler(config::save).setImpact(OptionImpact.HIGH)).addOption((OptionBuilder)builder.createIntegerOption(FG_MULTIPLIER_ID).setName((Component)Component.translatable((String)"upshift.option.fg_multiplier")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.fg_multiplier")).setDefaultValue(Integer.valueOf(2)).setRange(1, 4, 1).setValueFormatter(value -> Component.literal((String)(value + "x"))).setBinding(value -> {
-            config.frameGenMultiplier = value;
-        }, () -> Math.clamp(config.frameGenMultiplier, 1, 4)).setStorageHandler(config::save).setImpact(OptionImpact.MEDIUM)).addOption((OptionBuilder)builder.createBooleanOption(FG_FORCE_ID).setName((Component)Component.translatable((String)"upshift.option.fg_force")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.fg_force")).setDefaultValue(Boolean.valueOf(false)).setBinding(value -> {
-            config.frameGenForce = value;
-        }, () -> config.frameGenForce).setStorageHandler(config::save).setImpact(OptionImpact.MEDIUM)).addOption((OptionBuilder)builder.createExternalButtonOption(REPORT_ID).setName((Component)Component.translatable((String)"upshift.option.report")).setTooltip((Component)Component.translatable((String)"upshift.tooltip.report")).setScreenConsumer(screen -> this.dumpReport()))));
+        ModOptionsBuilder modOptions = builder.registerOwnModOptions().setName("Upshift")
+                .addPage(builder.createOptionPage()
+                        .setName(Component.translatable("upshift.page.preset"))
+                        .addOptionGroup(builder.createOptionGroup()
+                                .setName(Component.translatable("upshift.group.preset"))
+                                .addOption(builder.createIntegerOption(PROFILE_ID)
+                                        .setName(Component.translatable("upshift.option.preset"))
+                                        .setTooltip(index -> {
+                                            PerfProfile preset = PerfProfile.values()[SodiumConfigEntry.clamp(index, PerfProfile.values().length)];
+                                            return Component.translatable("upshift.tooltip.preset." + preset.id());
+                                        })
+                                        .setDefaultValue(Integer.valueOf(PerfProfile.BALANCED.ordinal()))
+                                        .setRange(0, PerfProfile.values().length - 1, 1)
+                                        .setValueFormatter(index -> Component.translatable("upshift.preset." + PerfProfile.values()[SodiumConfigEntry.clamp(index, PerfProfile.values().length)].id()))
+                                        .setBinding(index -> CpuTuner.get().apply(PerfProfile.values()[SodiumConfigEntry.clamp(index, PerfProfile.values().length)]), () -> config.profile.ordinal())
+                                        .setStorageHandler(config::save)
+                                        .setImpact(OptionImpact.HIGH))))
+                .addPage(builder.createOptionPage()
+                        .setName(Component.translatable("upshift.page.upscaling"))
+                        .addOptionGroup(builder.createOptionGroup()
+                                .setName(Component.translatable("upshift.group.profile"))
+                                .addOption(builder.createIntegerOption(PROFILE_ID)
+                                        .setName(Component.translatable("upshift.option.profile"))
+                                        .setTooltip(index -> {
+                                            PerfProfile preset = PerfProfile.values()[SodiumConfigEntry.clamp(index, PerfProfile.values().length)];
+                                            return Component.literal((String)preset.note());
+                                        })
+                                        .setDefaultValue(Integer.valueOf(PerfProfile.BALANCED.ordinal()))
+                                        .setRange(0, PerfProfile.values().length - 1, 1)
+                                        .setValueFormatter(index -> Component.literal((String)SodiumConfigEntry.profileLabel(PerfProfile.values()[SodiumConfigEntry.clamp(index, PerfProfile.values().length)])))
+                                        .setBinding(index -> CpuTuner.get().apply(PerfProfile.values()[SodiumConfigEntry.clamp(index, PerfProfile.values().length)]), () -> config.profile.ordinal())
+                                        .setStorageHandler(config::save)
+                                        .setImpact(OptionImpact.HIGH))
         modOptions.addPage(builder.createOptionPage()
                 .setName(Component.translatable("upshift.page.optimizations"))
                 .addOptionGroup(builder.createOptionGroup()
