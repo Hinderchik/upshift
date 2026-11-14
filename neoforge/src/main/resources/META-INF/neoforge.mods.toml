@@ -1,0 +1,38 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+issueTrackerURL = "https://github.com/XunKal1/upshift/issues"
+
+[[mods]]
+modId = "upshift"
+version = "${version}"
+displayName = "Upshift"
+iconFile = "icon.png"
+authors = "XunKal1"
+description = '''
+Render less, see more. Upshift draws the world at a lower internal resolution and resolves it back with real upscalers - FSR 1, NVIDIA Image Scaling and a built-in temporal accumulate - and presents extra interpolated frames on any GPU, selectable at 2x, 3x or 4x. Both live inside Sodium's video settings, both work on the OpenGL and the Vulkan backend.
+'''
+
+[[mixins]]
+config = "upshift.mixins.json"
+
+[[dependencies.upshift]]
+modId = "neoforge"
+type = "required"
+versionRange = "[26.2.0.93,)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.upshift]]
+modId = "minecraft"
+type = "required"
+versionRange = "[26.2,26.3)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.upshift]]
+modId = "sodium"
+type = "optional"
+versionRange = "[0.9.2,)"
+ordering = "AFTER"
+side = "CLIENT"

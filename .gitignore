@@ -1,0 +1,57 @@
+# Gradle
+.gradle/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# NeoForge / MDG
+neoforge/run/
+neoforge/*.log
+neoforge/sodium-neoforge-*.jar
+neoforge/modmenu-*.jar
+neoforge/build/
+neoforge/.gradle/
+neoforge/upshift-vr-edition/run/
+neoforge/upshift-vr-edition/build/
+neoforge/upshift-vr-edition/.gradle/
+
+# Fabric
+fabric/dev/
+fabric/run/
+fabric/*.log
+fabric/*.jar
+fabric/libs/
+fabric/build/
+fabric/.gradle/
+fabric/META-INF/
+fabric/build_output.txt
+fabric/run-client*.log
+fabric/upshift-vr-edition/.gradle/
+fabric/upshift-vr-edition/build/
+fabric/upshift-vr-edition/run/
+fabric/upshift-vr-edition/*.log
+fabric/upshift-vr-edition/*.jar
+fabric/upshift-vr-edition/build_vr_output.txt
+
+# Compiled class files
+net/
+*.class
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment & local
+.env
+.env.*
+!.env.example

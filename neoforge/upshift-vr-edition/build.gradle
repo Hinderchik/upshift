@@ -1,0 +1,76 @@
+plugins {
+    id 'java'
+    id 'net.neoforged.moddev' version "${moddev_version}"
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+}
+
+neoForge {
+    enable {
+        version = project.neoforge_version
+        disableRecompilation = true
+    }
+
+    runs {
+        client {
+            client()
+            gameDirectory = project.file('../run')
+            ideName = "VR Edition Dev"
+        }
+    }
+
+    mods {
+        upshiftVr {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+dependencies {
+    // Base Upshift NeoForge jar is consumed as compileClasspath + optional runtime.
+    // At runtime it must live next to the VR jar in the player's mods folder;
+    // dev runs pick it up automatically from the local libs dir.
+    compileOnly files("../build/libs/upshift-${upshift_version}.jar")
+    runtimeOnly files("../build/libs/upshift-${upshift_version}.jar")
+
+    // Sodium API + runtime, mirrored from the base port.
+    compileOnly files("../sodium-neoforge-api-${project.sodium_version}.jar")
+    runtimeOnly files("../sodium-neoforge-${project.sodium_version}.jar")
+
+    compileOnly "net.java.dev.jna:jna:5.17.0"
+    compileOnly "net.java.dev.jna:jna-platform:5.17.0"
+}
+
+java {
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = Integer.parseInt(project.java_version)
+    options.compilerArgs << "-Xlint:unchecked" << "-Xdiags:verbose"
+}
+
+processResources {
+    inputs.property "version", project.version
+    filesMatching("META-INF/neoforge.mods.toml") {
+        expand "version": project.version
+    }
+}
+
+jar {
+    from("../../LICENSE") {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+    from("../../CHANGELOG.md") {
+        rename { "CHANGELOG_${project.base.archivesName.get()}.md" }
+    }
+}

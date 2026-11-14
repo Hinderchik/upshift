@@ -1,0 +1,194 @@
+================================================================
+UPSHIFT VR EDITION — CURSEFORGE PROJECT SETUP SHEET
+Everything you need to paste into "Create a new project" on CurseForge
+================================================================
+
+----------------------------------------------------------------
+1) PROJECT NAME (Title)
+----------------------------------------------------------------
+Upshift VR Edition
+
+----------------------------------------------------------------
+2) SUMMARY (max 256 characters, one-line sentence)
+----------------------------------------------------------------
+Dedicated VR addon for Upshift. Keeps separate temporal history per eye, scales both lenses symmetrically, steadies the clamp to kill shimmer, and defers frame generation to the headset. Requires Upshift and Vivecraft.
+
+(characters: ~240 / 256 limit)
+
+----------------------------------------------------------------
+3) PROJECT AVATAR / ICON
+----------------------------------------------------------------
+Upload: upshiftVR.png  (project root, PNG, 10881 bytes)
+This file is already inside the JAR at assets/upshift_vr/textures/gui/
+
+----------------------------------------------------------------
+4) CATEGORIES
+----------------------------------------------------------------
+Primary:   Optimization
+Secondary: Utility & QoL  (optional)
+Badge:     Add-on  (check the "This is an add-on" box)
+
+----------------------------------------------------------------
+5) GAME VERSION / LOADER
+----------------------------------------------------------------
+Game:      Minecraft 26.2
+Loader:    Fabric
+Environment: Client only
+
+----------------------------------------------------------------
+6) LICENSE
+----------------------------------------------------------------
+MIT
+
+----------------------------------------------------------------
+7) OPTIONAL LINKS
+----------------------------------------------------------------
+Source code URL:  (your GitHub repo, if any)
+Issues URL:       (your GitHub issues, if any)
+Website:          (optional)
+
+----------------------------------------------------------------
+8) DESCRIPTION — paste this whole block as the project page body
+----------------------------------------------------------------
+# Upshift VR Edition
+
+Upshift, tuned for headsets.
+
+This is an **add-on** for [Upshift](https://www.curseforge.com/minecraft/mc-mods/upshift).
+When you run Minecraft with **Vivecraft** and **Upshift**, the add-on activates
+automatically and adapts the upscaler to stereo rendering. Nothing changes when
+you play flat — VR features stay completely inert until a real VR session is
+detected.
+
+## What it does in VR
+
+1. **Per-eye temporal upscaling** — The temporal pass keeps a separate history
+   buffer for the left and the right eye. A single shared buffer would mix the
+   two views and destroy stereo depth.
+2. **Symmetric auto-resolution** — The dynamic scaler measures the *combined*
+   GPU work of both eyes and moves the internal resolution of both lenses
+   together, so the eyes never disagree.
+3. **Steadier temporal clamp** — In VR a sub-pixel shimmer reads as a wobble,
+   so the neighbourhood clamp is tightened (1.5 px → 1.0 px). You trade a sliver
+   of micro-detail for a rock-steady image.
+4. **Frame generation steps aside** — Upshift's built-in interpolator is
+   disabled in stereo mode; the headset's own reprojection (OpenXR / SteamVR)
+   owns the extra frames.
+5. **Hands and overlays at native rate** — Controllers/hands are composited at
+   the native frame rate, and the flat 2D performance panel is hidden in VR,
+   replaced by a single diagnostic line.
+
+## Requirements
+
+| Component | Version |
+|-----------|---------|
+| Minecraft | 26.2 |
+| Java | 25 |
+| Fabric Loader | 0.19.5+ |
+| Upshift | 1.6.4 or newer |
+| Vivecraft | 26.2 build |
+
+Sodium is recommended (the settings pages live in Sodium's video settings),
+but it is not required.
+
+## Install
+
+1. Install **Upshift** 1.6.4+.
+2. Install **Vivecraft** for 26.2.
+3. Drop `upshift_vr_edition-1.0.0.jar` into your `mods` folder.
+4. Launch with Fabric. Enter VR in game — the add-on enables itself.
+
+## Configuration
+
+All VR options appear in **Sodium → Video Settings → Upshift VR Edition**
+(five pages: General, Frame Generation, Overlay, Foveated, Advanced), or edit
+`config/upshift_vr.json` directly:
+
+```json
+{
+  "vrEnabled": true,
+  "vrTemporalEnabled": true,
+  "vrTemporalClampWeight": 0.08,
+  "vrAutoResolution": true,
+  "vrTargetFps": 72,
+  "vrFrameGenEnabled": false,
+  "vrHideFlatOverlay": true,
+  "vrProjectOverlayToWrist": false,
+  "vrOverlayMode": 0
+}
+```
+
+Settings can be changed at runtime.
+
+## Safety / compatibility
+
+- VR activation is **runtime-detected**: the add-on does nothing if Vivecraft
+  is installed but VR is not active, and nothing if Vivecraft is absent.
+- No compile-time dependency on Vivecraft classes.
+- Works on both the OpenGL and the Vulkan backend.
+- Compatible with Sodium; uses `@Inject`/`@Redirect`/`@WrapOperation`, never
+  `@Overwrite`.
+- Client-side only.
+
+----------------------------------------------------------------
+9) FIRST RELEASE UPLOAD
+----------------------------------------------------------------
+Display name:      Upshift VR Edition 1.0.0
+Release type:      Beta  (or Release)
+File to upload:    C:\Users\XunKal1\Documents\upshift\upshift-vr-edition\build\libs\upshift_vr_edition-1.0.0.jar
+
+Changelog type:    Markdown
+
+Changelog content:
+---
+## 1.0.0 — Initial VR Edition Release
+
+### Added
+- **Per-eye temporal upscaling** — separate history buffers and temporal matrices for the left and right eye; prevents cross-eye contamination that would break stereo depth.
+- **Stereo detection** — automatically detects Vivecraft's stereo rendering (two `renderLevel` passes per `renderFrame`).
+- **Shared jitter synchronization** — both eyes use the same jitter pattern per frame pair, advanced once per frame.
+- **VR temporal clamp** — stricter neighbourhood clamp (1.0 px vs 1.5 px) to suppress sub-pixel shimmer that causes nausea in VR.
+- **VR auto-resolution** — scales both eyes symmetrically from one measurement of the combined stereo work.
+- **Built-in frame generation disabled in VR** — the headset's reprojection takes over.
+- **VR configuration** — separate `upshift_vr.json` and five Sodium settings pages (General, Frame Gen, Overlay, Foveated, Advanced).
+- **Minimal VR overlay** — flat performance panel hidden in VR, replaced by a diagnostic line.
+
+### Technical
+- No compile-time dependency on Vivecraft; all detection is runtime reflection-based.
+- Flat rendering path unchanged when VR is inactive.
+- Uses Upshift's public API — no `@Overwrite`, no access wideners, Sodium-safe.
+
+### Requirements
+- Upshift 1.6.4+
+- Vivecraft for Minecraft 26.2
+- Fabric Loader 0.19.5+
+- Sodium (recommended)
+---
+
+----------------------------------------------------------------
+10) MOD RELATIONSHIPS (tab "Relations")
+----------------------------------------------------------------
+Required dependencies:
+  Upshift            project 1759097
+
+Optional dependencies:
+  Vivecraft
+  Sodium
+
+Incompatible mods:
+  (none)
+
+----------------------------------------------------------------
+11) PRE-PUBLISH CHECKLIST
+----------------------------------------------------------------
+[ ] Project name: Upshift VR Edition
+[ ] Summary pasted (fits within 256 char limit)
+[ ] Avatar: upshiftVR.png uploaded
+[ ] Category: Optimization (+ Utility & QoL)
+[ ] Game version: 26.2 / Fabric / Client
+[ ] License: MIT
+[ ] Description text pasted
+[ ] File upshift_vr_edition-1.0.0.jar uploaded
+[ ] Release type set (Beta / Release)
+[ ] Changelog pasted
+[ ] Required dependency "Upshift" linked (project 1759097)

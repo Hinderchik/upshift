@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.upshift.vr.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "VrGameRendererMixin",
+    "VrMinecraftMixin",
+    "VrUpscaleManagerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

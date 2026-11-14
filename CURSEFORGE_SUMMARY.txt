@@ -1,0 +1,1 @@
+Upscaling + frame generation for Minecraft. Renders at lower resolution, upscales via FSR 1, NIS or temporal TAAU, and interpolates extra frames on any GPU. All in Sodium's video settings.

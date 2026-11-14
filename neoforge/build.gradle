@@ -1,0 +1,81 @@
+plugins {
+    id 'java'
+    id 'net.neoforged.moddev' version "${moddev_version}"
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+}
+
+neoForge {
+    enable {
+        version = project.neoforge_version
+        // The port only needs the patched game jar to compile and run. Skipping
+        // the decompile/recompile step keeps the first build short.
+        disableRecompilation = true
+    }
+
+    runs {
+        client {
+            client()
+            gameDirectory = project.file('run')
+        }
+        server {
+            server()
+        }
+    }
+
+    mods {
+        upshift {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+dependencies {
+    // Sodium ships from the project folder, like the Fabric build. The API jar
+    // is compile-only; the full mod jar is loaded in the development client so
+    // the settings page can be checked. Players get Sodium from their own mods
+    // folder, and Upshift works without it.
+    compileOnly files("sodium-neoforge-api-${project.sodium_version}.jar")
+    runtimeOnly files("sodium-neoforge-${project.sodium_version}.jar")
+
+    // Mod Menu is only here for checking the in-game mod list in the
+    // development client; it is not a dependency of the built jar.
+    runtimeOnly files("modmenu-26.2-neoforge.jar")
+
+    // JNA ships with Minecraft (5.17.0); compile against the bundled version and
+    // do not repackage it. jna-platform provides the WMI helpers used to read
+    // sensors published by LibreHardwareMonitor/OpenHardwareMonitor.
+    compileOnly "net.java.dev.jna:jna:5.17.0"
+    compileOnly "net.java.dev.jna:jna-platform:5.17.0"
+}
+
+java {
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = Integer.parseInt(project.java_version)
+    options.compilerArgs << "-Xlint:unchecked" << "-Xdiags:verbose"
+}
+
+processResources {
+    inputs.property "version", project.version
+    filesMatching("META-INF/neoforge.mods.toml") {
+        expand "version": project.version
+    }
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}

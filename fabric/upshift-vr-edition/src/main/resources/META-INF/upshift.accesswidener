@@ -1,0 +1,40 @@
+# Upshift access widener for VR addon
+# Makes private fields accessible to dev.upshift.vr.*
+
+net.minecraft.class_310 net.minecraft.client.renderer.GameRenderer mainRenderTarget final->public
+net.minecraft.class_310 net.minecraft.client.renderer.GameRenderer field_1649 final->public
+
+dev.upshift.render.UpscaleManager taau final->public
+dev.upshift.render.UpscaleManager pristineProjection final->public
+dev.upshift.render.UpscaleManager previousRotation final->public
+dev.upshift.render.UpscaleManager rotationScratch final->public
+dev.upshift.render.UpscaleManager rotationQuat final->public
+dev.upshift.render.UpscaleManager sizeScratch final->public
+dev.upshift.render.UpscaleManager hasPreviousRotation final->public
+dev.upshift.render.UpscaleManager jitterValid final->public
+dev.upshift.render.UpscaleManager jitterIndex final->public
+dev.upshift.render.UpscaleManager hasPresented final->public
+dev.upshift.render.UpscaleManager menuReuseLeft final->public
+dev.upshift.render.UpscaleManager blurHandled final->public
+dev.upshift.render.UpscaleManager intermediate final->public
+dev.upshift.render.UpscaleManager intermediateView final->public
+dev.upshift.render.UpscaleManager intermediateW final->public
+dev.upshift.render.UpscaleManager intermediateH final->public
+dev.upshift.render.UpscaleManager worldTarget final->public
+dev.upshift.render.UpscaleManager worldW final->public
+dev.upshift.render.UpscaleManager worldH final->public
+dev.upshift.render.UpscaleManager targetCache final->public
+dev.upshift.render.UpscaleManager retired final->public
+dev.upshift.render.UpscaleManager frame final->public
+dev.upshift.render.UpscaleManager frameStartNs final->public
+dev.upshift.render.UpscaleManager active final->public
+dev.upshift.render.UpscaleManager lastProbeNs final->public
+dev.upshift.render.UpscaleManager measurePhase final->public
+dev.upshift.render.UpscaleManager warnedNotWired final->public
+dev.upshift.render.UpscaleManager loggedActive final->public
+dev.upshift.render.UpscaleManager fsr1 final->public
+dev.upshift.render.UpscaleManager fast final->public
+dev.upshift.render.UpscaleManager nis final->public
+dev.upshift.render.UpscaleManager JITTER final static->public
+dev.upshift.render.UpscaleManager ensureWorldTarget(int,int) -> public
+dev.upshift.render.UpscaleManager present(net.minecraft.class_4582,com.mojang.blaze3d.textures.GpuTextureView) -> public

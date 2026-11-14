@@ -1,0 +1,93 @@
+plugins {
+    id 'fabric-loom' version "${loom_version}"
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+
+
+repositories {
+    // Local mirror for Fabric API: the public artifact ships a sources jar that
+    // cannot be remapped with these 26.2 mappings. This mirror has the runtime
+    // jar only, so Loom skips source remapping while still processing the
+    // nested Fabric API modules for the development runtime.
+    exclusiveContent {
+        forRepository {
+            maven { url = uri("libs/repo") }
+        }
+        filter {
+            includeModule("net.fabricmc.fabric-api", "fabric-api")
+        }
+    }
+    mavenCentral()
+    maven { url = "https://maven.fabricmc.net/" }
+    maven { url = "https://maven.terraformersmc.com/releases" } // ModMenu (optional dep)
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:1.21.4+build.1:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
+    // Fabric API supplies the mod resource pack and resource reload plumbing.
+    // Runtime-only: Upshift does not compile against Fabric API classes.
+    modRuntimeOnly "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+    // Sodium - compile-only and development runtime; optional at runtime
+    // (detected via FabricLoader.isModLoaded). modCompileOnly remaps the
+    // intermediary-mapped production jar to named (Yarn) mappings.
+    modCompileOnly files("sodium-fabric-0.9.2+mc26.2.jar")
+    modRuntimeOnly files("sodium-fabric-0.9.2+mc26.2.jar")
+
+    // JNA ships with Minecraft (5.17.0); compile against the bundled version and
+    // do not repackage it. jna-platform provides the WMI helpers used to read
+    // sensors published by LibreHardwareMonitor/OpenHardwareMonitor.
+    compileOnly "net.java.dev.jna:jna:5.17.0"
+    compileOnly "net.java.dev.jna:jna-platform:5.17.0"
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs << "-Xlint:unchecked" << "-Xdiags:verbose"
+}
+
+processResources {
+    inputs.property "version", project.version
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = Integer.parseInt(project.java_version)
+}
+
+java {
+    sourceCompatibility = JavaVersion.toVersion(project.java_version)
+    targetCompatibility = JavaVersion.toVersion(project.java_version)
+    withSourcesJar()
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}
+
+// Loom remaps Fabric API's nested modules but drops the "jars" list from the
+// remapped fabric.mod.json, so the development loader never discovers them and
+// no mod resource pack is registered. Append the already-remapped module jars
+// to the development runtime classpath; the loader picks them up from there.
+tasks.named("runClient") {
+    classpath += files(
+        fileTree(".gradle/loom-cache/remapped_mods/remapped/net/fabricmc/fabric-api") {
+            include("**/*.jar")
+            exclude("**/fabric-api-a64e8edf/**")
+        }
+    )
+}
+

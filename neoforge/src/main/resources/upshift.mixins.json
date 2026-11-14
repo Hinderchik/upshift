@@ -1,0 +1,24 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.upshift.mixin",
+  "plugin": "dev.upshift.mixin.UpshiftMixinPlugin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "GameRendererMixin",
+    "MinecraftMixin",
+    "RenderPipelinesMixin",
+    "HudMixin",
+    "SkyRendererMixin",
+    "EntityCullMixin",
+    "ParticleCullMixin",
+    "BlockEntityCullMixin",
+    "TextureAtlasMixin",
+    "TextCacheMixin",
+    "FontWidthMixin",
+    "MobAiThrottleMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
