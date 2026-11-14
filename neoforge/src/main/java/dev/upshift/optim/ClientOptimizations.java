@@ -46,6 +46,9 @@ public final class ClientOptimizations {
      * @return true when the block entity should be skipped entirely.
      */
     public static boolean cullBlockEntity(BlockEntity blockEntity) {
+        if (ModCompat.skipBlockEntityCull()) {
+            return false;
+        }
         FsrConfig config = FsrConfig.get();
         int limit = config.blockEntityDistance;
         if (limit <= 0) {
@@ -67,6 +70,9 @@ public final class ClientOptimizations {
      * @return true when this atlas should not advance its animation this frame.
      */
     public static boolean shouldSkipAtlasTick(int frameCounter) {
+        if (ModCompat.skipAnimationFreeze()) {
+            return false;
+        }
         FsrConfig config = FsrConfig.get();
         int skip = config.animationFrameSkip;
         if (skip > 1 && frameCounter % skip != 0) {
@@ -87,6 +93,9 @@ public final class ClientOptimizations {
      * @return true when the particle should not be created at all.
      */
     public static boolean cullParticle(ParticleOptions options, double x, double y, double z) {
+        if (ModCompat.skipParticleCull()) {
+            return false;
+        }
         FsrConfig config = FsrConfig.get();
         if (!config.limitParticles) {
             return false;
@@ -131,6 +140,9 @@ public final class ClientOptimizations {
      * @return true when the entity should be skipped entirely.
      */
     public static boolean cullEntity(Entity entity, double dx, double dy, double dz) {
+        if (ModCompat.skipEntityCull()) {
+            return false;
+        }
         FsrConfig config = FsrConfig.get();
         Minecraft minecraft = Minecraft.getInstance();
         if (entity == minecraft.player) {

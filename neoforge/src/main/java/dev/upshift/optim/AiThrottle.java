@@ -29,6 +29,9 @@ public final class AiThrottle {
      *         on this tick. Running goals still tick on the cheap path.
      */
     public static boolean shouldThrottle(Mob mob) {
+        if (ModCompat.skipAiThrottle()) {
+            return false;
+        }
         FsrConfig config = FsrConfig.get();
         int interval = config.aiThrottleInterval;
         int distance = config.aiThrottleDistance;

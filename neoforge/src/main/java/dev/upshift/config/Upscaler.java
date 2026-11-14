@@ -5,6 +5,7 @@ public enum Upscaler {
     FSR1("fsr1", false, false),
     NIS("nis", false, false),
     TAAU("taau", false, true),
+    SHARPENING("sharpening", false, false),
     FSR2("fsr2", true, true),
     FSR31("fsr31", true, true),
     FSR4("fsr4", true, true),
@@ -34,11 +35,11 @@ public enum Upscaler {
     }
 
     public boolean isSpatial() {
-        return this == FSR1 || this == NIS || this == TAAU;
+        return this == FSR1 || this == NIS || this == TAAU || this == SHARPENING;
     }
 
     public boolean isImplementedHere() {
-        return this == FSR1 || this == NIS || this == TAAU;
+        return this == FSR1 || this == NIS || this == TAAU || this == SHARPENING;
     }
 
     public static Upscaler byId(String id) {

@@ -1,6 +1,7 @@
 package dev.upshift.optim;
 
 import dev.upshift.config.FsrConfig;
+import dev.upshift.optim.ModCompat;
 import java.util.List;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -29,6 +30,9 @@ public final class AiThrottle {
      *         on this tick. Running goals still tick on the cheap path.
      */
     public static boolean shouldThrottle(Mob mob) {
+        if (ModCompat.skipAiThrottle()) {
+            return false;
+        }
         FsrConfig config = FsrConfig.get();
         int interval = config.aiThrottleInterval;
         int distance = config.aiThrottleDistance;

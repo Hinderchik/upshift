@@ -29,6 +29,7 @@ public final class FsrConfig {
     public Upscaler upscaler = Upscaler.TAAU;
     public float customScale = 0.67f;
     public float sharpness = 0.0f;
+    public boolean sharpeningOnly = false;
     public boolean fastUpscale = true;
     public boolean autoFallback = true;
     public boolean allowExperimentalBackends = true;
@@ -207,6 +208,10 @@ public final class FsrConfig {
         this.aiThrottleDistance = Math.clamp(this.aiThrottleDistance, 0, 128);
         this.aiThrottleInterval = Math.clamp(this.aiThrottleInterval, 1, 20);
         this.frameGenMultiplier = Math.clamp(this.frameGenMultiplier, 1, 4);
+        // Sharpening-only mode only makes sense at 100% scale
+        if (this.sharpeningOnly && this.customScale < 1.0f) {
+            this.sharpeningOnly = false;
+        }
         return this;
     }
 }

@@ -134,7 +134,11 @@ public final class UpscaleManager {
     }
 
     public boolean scalingActive() {
-        return FsrConfig.get().upscaler != Upscaler.OFF && FsrConfig.get().renderScale() < 1.0f;
+        FsrConfig config = FsrConfig.get();
+        if (config.sharpeningOnly && config.customScale >= 1.0f && config.upscaler == Upscaler.SHARPENING) {
+            return true;
+        }
+        return config.upscaler != Upscaler.OFF && config.renderScale() < 1.0f;
     }
 
     public RenderTarget beginWorld() {
@@ -254,7 +258,7 @@ public final class UpscaleManager {
         int inH = this.worldTarget.height;
         int outW = main.width;
         int outH = main.height;
-        if (inW == outW && inH == outH) {
+        if (inW == outW && inH == outH && this.active != Upscaler.SHARPENING) {
             return false;
         }
         CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
@@ -279,6 +283,17 @@ public final class UpscaleManager {
                 this.active = Upscaler.OFF;
                 return false;
             }
+        } else if (this.active == Upscaler.SHARPENING) {
+            this.fsr1.rcas(encoder, source, main.getColorTextureView(), FsrConfig.get().sharpness);
+            if (this.fsr1.isBroken()) {
+                this.active = Upscaler.OFF;
+                return false;
+            }
+            if (!this.loggedActive) {
+                this.loggedActive = true;
+                Upshift.LOG.info("RCAS sharpening active at native resolution: sharpness={}", FsrConfig.get().sharpness);
+            }
+            return true;
         } else {
             this.ensureIntermediate(outW, outH);
             this.fsr1.easu(encoder, source, inW, inH, this.intermediateView, outW, outH);
@@ -292,7 +307,7 @@ public final class UpscaleManager {
                 return false;
             }
         }
-        if (!this.loggedActive) {
+        if (!this.loggedActive && this.active != Upscaler.SHARPENING) {
             this.loggedActive = true;
             Upshift.LOG.info("FSR 1 active: {}x{} internal -> {}x{} window", new Object[]{inW, inH, outW, outH});
         }
@@ -303,6 +318,13 @@ public final class UpscaleManager {
         Upscaler requested = config.upscaler;
         if (requested == Upscaler.OFF) {
             return Upscaler.OFF;
+        }
+        if (requested == Upscaler.SHARPENING) {
+            if (config.customScale < 1.0f) {
+                Upshift.LOG.warn("SHARPENING upscaler requires 100% scale, falling back to FSR1");
+                return Upscaler.FSR1;
+            }
+            return Upscaler.SHARPENING;
         }
         CapabilityReport report = Capabilities.report();
         List<Upscaler> runnable = report.runnableUpscalers();
