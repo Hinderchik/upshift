@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.Function;
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
-import net.caffeinemc.mods.sodium.api.config.ConfigEntryPointForge;
 import net.caffeinemc.mods.sodium.api.config.option.ControlValueFormatter;
 import net.caffeinemc.mods.sodium.api.config.option.OptionImpact;
 import net.caffeinemc.mods.sodium.api.config.structure.ConfigBuilder;
@@ -25,7 +24,6 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
-@ConfigEntryPointForge(Upshift.MOD_ID)
 public final class SodiumConfigEntry
 implements ConfigEntryPoint {
     private static final Identifier UPSCALER_ID = Identifier.parse((String)"upshift:upscaler");
@@ -500,6 +498,7 @@ implements ConfigEntryPoint {
             case FSR_FG -> "FSR frame generation";
             case DLSS_FG -> "DLSS frame generation";
             case XESS_FG -> "XeSS frame generation";
+            case ANR -> "ANR (AMD FidelityFX Frame Gen)";
         };
     }
 

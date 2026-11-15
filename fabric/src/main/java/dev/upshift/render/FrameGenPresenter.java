@@ -23,13 +23,17 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import dev.upshift.Upshift;
 import dev.upshift.config.FrameGen;
 import dev.upshift.config.FsrConfig;
+import dev.upshift.gpu.AnrDetector;
+import dev.upshift.gpu.AnrDownloader;
 import dev.upshift.overlay.PerfStats;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderManager;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
@@ -228,13 +232,22 @@ public final class FrameGenPresenter {
                 this.matrixData.clear();
                 this.matrix.get(0, this.matrixData);
                 this.matrixData.position(0).limit(64);
+
                 if (paced) {
                     long deadline = base + (long)index * period;
                     long now2 = System.nanoTime();
                     if (now2 > deadline + 2_000_000L) {
-                        // Running late — skip sleep for this frame to catch up
-                    } else {
-                        sleepUntil(deadline);
+                        // Running late — skip this frame
+                        continue;
+                    }
+                    // Sleep BEFORE rendering to hit VSync
+                    long waitNs = deadline - System.nanoTime();
+                    if (waitNs > 0L) {
+                        long millis = waitNs / 1_000_000L;
+                        if (millis > 2L) millis = 2L;
+                        try {
+                            Thread.sleep(millis, (int)(waitNs % 1_000_000L));
+                        } catch (InterruptedException ignored) {}
                     }
                 }
                 CommandEncoder frameEncoder = device.createCommandEncoder();
@@ -345,18 +358,47 @@ public final class FrameGenPresenter {
 
     private boolean generationEnabled() {
         FsrConfig config = FsrConfig.get();
-        if (config.frameGen != FrameGen.INTERNAL) {
-            return false;
-        }
-        if (this.broken) {
-            if (this.retryAtNs == 0L || System.nanoTime() < this.retryAtNs) {
+
+        // Built-in generator
+        if (config.frameGen == FrameGen.INTERNAL) {
+            if (this.broken) {
+                if (this.retryAtNs == 0L || System.nanoTime() < this.retryAtNs) {
+                    return false;
+                }
+                this.broken = false;
+                this.retryAtNs = 0L;
+                this.slot = -1;
+                Upshift.LOG.info("retrying built-in frame generation");
+            }
+            if (config.frameGenMultiplier <= 1) {
                 return false;
             }
-            this.broken = false;
-            this.retryAtNs = 0L;
-            this.slot = -1;
-            Upshift.LOG.info("retrying built-in frame generation");
         }
+        // ANR (on-demand download)
+        else if (config.frameGen == FrameGen.ANR) {
+            if (!AnrDetector.isSupported()) {
+                Upshift.LOG.info("ANR selected but GPU not supported: {}", AnrDetector.getReason());
+                return false;
+            }
+            // Check if downloaded and ready
+            if (AnrDownloader.getState() != dev.upshift.gpu.AnrDownloader.DownloadState.COMPLETED) {
+                // Auto-start download if user consented
+                if (AnrDownloader.hasUserConsented()) {
+                    AnrDownloader.ensureDownloaded();
+                }
+                return false; // Not ready yet
+            }
+            // TODO: Integrate with native ANR when library is available
+            return false;
+        }
+        // Other external generators (FSR_FG, DLSS_FG, XESS_FG) - handled by native runtime
+        else if (config.frameGen.needsNativeRuntime()) {
+            return false; // Handled elsewhere
+        }
+        else {
+            return false;
+        }
+
         if (config.frameGenMultiplier <= 1) {
             return false;
         }

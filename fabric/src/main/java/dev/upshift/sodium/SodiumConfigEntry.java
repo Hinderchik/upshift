@@ -498,6 +498,7 @@ implements ConfigEntryPoint {
             case FSR_FG -> "FSR frame generation";
             case DLSS_FG -> "DLSS frame generation";
             case XESS_FG -> "XeSS frame generation";
+            case ANR -> "ANR (AMD FidelityFX Frame Gen)";
         };
     }
 

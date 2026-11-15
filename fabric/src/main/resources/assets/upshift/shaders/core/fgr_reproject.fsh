@@ -36,8 +36,9 @@ void main() {
 
     // Pixels that differ between the finished frame and the world-only capture are the HUD.
     // They are copied from the finished frame so the crosshair, hotbar and chat never move.
+    // Higher threshold to avoid false positives from render precision differences.
     float diff = max(max(abs(hudFrame.r - worldNow.r), abs(hudFrame.g - worldNow.g)), abs(hudFrame.b - worldNow.b));
-    float hud = smoothstep(1.5 / 255.0, 4.0 / 255.0, diff);
+    float hud = smoothstep(8.0 / 255.0, 16.0 / 255.0, diff);
 
     fragColor = vec4(mix(world, hudFrame, hud), 1.0);
 }
