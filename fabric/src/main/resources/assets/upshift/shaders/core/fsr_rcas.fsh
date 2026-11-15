@@ -44,10 +44,6 @@ float computeLocalContrast(vec2 uv, vec2 texel) {
     return maxL - minL;
 }
 
-float luma(vec3 c) {
-    return c.b * 0.5 + (c.r * 0.5 + c.g);
-}
-
 void main() {
     vec2 texel = vec2(textureSize(InSampler, 0));
     vec2 sp = texCoord / texel;

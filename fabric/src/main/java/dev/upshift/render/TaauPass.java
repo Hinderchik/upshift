@@ -109,6 +109,15 @@ public final class TaauPass {
             this.ensureBuffer();
             encoder.writeToBuffer(this.params.slice(), this.data);
 
+            if (projectionInverse != null) {
+                // upload projection inverse for depth reconstruction
+                this.ensureProjectionInverseBuffer();
+                this.projectionInverseData.clear();
+                projectionInverse.get(0, this.projectionInverseData);
+                this.projectionInverseData.position(0).limit(64);
+                encoder.writeToBuffer(this.projectionInverseBuffer.slice(), this.projectionInverseData);
+            }
+
             GpuSampler sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
             try (RenderPass pass = encoder.createRenderPass(() -> "upshift/taau", destination, Optional.empty())) {
                 pass.setPipeline(pipeline);
@@ -118,11 +127,6 @@ public final class TaauPass {
                     pass.bindTexture("DepthSampler", depthTexture, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
                 }
                 if (projectionInverse != null) {
-                    // upload projection inverse for depth reconstruction
-                    this.projectionInverseData.clear();
-                    projectionInverse.get(0, this.projectionInverseData);
-                    this.ensureProjectionInverseBuffer();
-                    encoder.writeToBuffer(this.projectionInverseBuffer.slice(), this.projectionInverseData);
                     pass.setUniform("ProjectionInverse", this.projectionInverseBuffer);
                 }
                 pass.setUniform("TaauParams", this.params);

@@ -203,7 +203,7 @@ public final class FrameGenPresenter {
                 return;
             }
             this.relative.set((Quaternionfc)this.worldRotation[previous]).conjugate().mul((Quaternionfc)this.worldRotation[this.slot]);
-            if (stepAngle(this.relative) < 0.0005f) {
+            if (stepAngle(this.relative) < 0.001f) {
                 blit.blit(surface, encoder, realView);
                 return;
             }
@@ -229,7 +229,13 @@ public final class FrameGenPresenter {
                 this.matrix.get(0, this.matrixData);
                 this.matrixData.position(0).limit(64);
                 if (paced) {
-                    sleepUntil(base + (long)index * period);
+                    long deadline = base + (long)index * period;
+                    long now2 = System.nanoTime();
+                    if (now2 > deadline + 2_000_000L) {
+                        // Running late — skip sleep for this frame to catch up
+                    } else {
+                        sleepUntil(deadline);
+                    }
                 }
                 CommandEncoder frameEncoder = device.createCommandEncoder();
                 frameEncoder.writeToBuffer(this.warpBuffer.slice(), this.matrixData);
@@ -430,6 +436,10 @@ public final class FrameGenPresenter {
             long millis = wait / 1_000_000L;
             if (millis <= 0L) {
                 return;
+            }
+            // Cap sleep to 2ms to avoid missing VSync deadline on slow frames
+            if (millis > 2L) {
+                millis = 2L;
             }
             try {
                 Thread.sleep(millis, (int)(wait % 1_000_000L));
