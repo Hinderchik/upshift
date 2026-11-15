@@ -65,5 +65,18 @@
   "upshift.option.ai_distance": "AI distance",
   "upshift.tooltip.ai_distance": "Mobs beyond this many blocks from every player are throttled. Mobs closer to any player keep their full AI. 0 turns throttling off.",
   "upshift.option.ai_interval": "AI update rate",
-  "upshift.tooltip.ai_interval": "How often distant mobs run a full AI tick. Every 4 ticks is the default: sensing and the goal scan run once, the cheap running-goal pass runs on the others. Higher values save more on big farms but make distant mobs react more slowly."
+  "upshift.tooltip.ai_interval": "How often distant mobs run a full AI tick. Every 4 ticks is the default: sensing and the goal scan run once, the cheap running-goal pass runs on the others. Higher values save more on big farms but make distant mobs react more slowly.",
+  "upshift.page.preset": "Performance preset",
+  "upshift.group.preset": "Quick preset",
+  "upshift.option.sharpening_only": "Sharpening only (native res)",
+  "upshift.option.preset": "Preset",
+  "upshift.tooltip.sharpening_only": "Run only the RCAS sharpening pass at 100% internal resolution. Disabled automatically when internal scale is below 100%.",
+  "upshift.tooltip.preset.balanced": "Default: 67% internal, TAAU, 60 FPS target, vanilla particles. Good starting point.",
+  "upshift.tooltip.preset.cpu_first": "CPU-bound systems: 75% internal, single-pass FSR 1, fewer particles/entities. Best when CPU is the bottleneck.",
+  "upshift.tooltip.preset.gpu_first": "GPU-bound / high refresh: 50% internal, RCAS sharpen, 120 FPS target. Best when GPU is the bottleneck.",
+  "upshift.tooltip.preset.integrated": "Integrated graphics / low-end: 45% internal, single-pass FSR 1, fewer entities/particles, 45 FPS target.",
+  "upshift.preset.balanced": "Balanced",
+  "upshift.preset.cpu_first": "CPU First",
+  "upshift.preset.gpu_first": "GPU First",
+  "upshift.preset.integrated": "Integrated Graphics"
 }

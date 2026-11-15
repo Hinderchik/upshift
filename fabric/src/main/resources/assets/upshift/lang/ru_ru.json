@@ -65,5 +65,18 @@
   "upshift.option.ai_distance": "Дистанция AI",
   "upshift.tooltip.ai_distance": "Мобы дальше этого количества блоков от каждого игрока ограничены. Мобы ближе к любому игроку сохраняют полный AI. 0 выключает throttle.",
   "upshift.option.ai_interval": "Частота обновления AI",
-  "upshift.tooltip.ai_interval": "Как часто далёкие мобы запускают полный AI tick. Каждые 4 тика - дефолт: sensing и goal scan запускаются один раз, дешёвый running-goal pass запускается на остальных. Более высокие значения экономят больше на больших фермах но делают далёких мобов менее реактивными."
+  "upshift.tooltip.ai_interval": "Как часто далёкие мобы запускают полный AI tick. Каждые 4 тика - дефолт: sensing и goal scan запускаются один раз, дешёвый running-goal pass запускается на остальных. Более высокие значения экономят больше на больших фермах но делают далёких мобов менее реактивными.",
+  "upshift.page.preset": "Пресет производительности",
+  "upshift.group.preset": "Быстрый пресет",
+  "upshift.option.sharpening_only": "Только резкость (нативное разрешение)",
+  "upshift.option.preset": "Пресет",
+  "upshift.tooltip.sharpening_only": "Запускать только проход RCAS резкости на 100% внутреннем разрешении. Автоматически отключается когда внутренний масштаб ниже 100%.",
+  "upshift.tooltip.preset.balanced": "По умолчанию: 67% внутреннего, TAAU, цель 60 FPS, ванильные частицы. Хорошая стартовая точка.",
+  "upshift.tooltip.preset.cpu_first": "CPU-bound системы: 75% внутреннего, однопроходный FSR 1, меньше частиц/сущностей. Лучше когда CPU - бутылочное горлышко.",
+  "upshift.tooltip.preset.gpu_first": "GPU-bound / высокий refresh: 50% внутреннего, RCAS резкость, цель 120 FPS. Лучше когда GPU - бутылочное горлышко.",
+  "upshift.tooltip.preset.integrated": "Интегрированная графика / слабый ПК: 45% внутреннего, однопроходный FSR 1, меньше сущностей/частиц, цель 45 FPS.",
+  "upshift.preset.balanced": "Сбалансированный",
+  "upshift.preset.cpu_first": "CPU First",
+  "upshift.preset.gpu_first": "GPU First",
+  "upshift.preset.integrated": "Интегрированная графика"
 }
