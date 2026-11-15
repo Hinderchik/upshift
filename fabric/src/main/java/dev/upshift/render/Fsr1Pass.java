@@ -33,6 +33,7 @@ public final class Fsr1Pass {
     private int conOutW = -1;
     private int conOutH = -1;
     private float conSharpness = Float.NaN;
+    private float conAdaptiveStrength = Float.NaN;
     private boolean broken;
 
     public static synchronized List<RenderPipeline> pipelines() {
@@ -67,13 +68,13 @@ public final class Fsr1Pass {
         }
     }
 
-    public void rcas(CommandEncoder encoder, GpuTextureView input, GpuTextureView output, float sharpness) {
+    public void rcas(CommandEncoder encoder, GpuTextureView input, GpuTextureView output, float sharpness, float adaptiveStrength) {
         if (this.broken) {
             return;
         }
         try {
             Fsr1Pass.pipelines();
-            this.ensureRcasConstants(sharpness);
+            this.ensureRcasConstants(sharpness, adaptiveStrength);
             GpuSampler sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
             try (RenderPass pass = encoder.createRenderPass(() -> "upshift/rcas", output, Optional.empty())) {
                 pass.setPipeline(rcasPipeline);
@@ -86,6 +87,11 @@ public final class Fsr1Pass {
             this.broken = true;
             Upshift.LOG.error("FSR 1 RCAS failed; upscaling disabled for this session", t);
         }
+    }
+
+    public void rcas(CommandEncoder encoder, GpuTextureView input, GpuTextureView output, float sharpness) {
+        // Backwards compatibility: default adaptive strength 0.0 (non-adaptive)
+        this.rcas(encoder, input, output, sharpness, 0.0f);
     }
 
     public boolean isBroken() {
@@ -122,8 +128,8 @@ public final class Fsr1Pass {
         this.conOutH = outH;
     }
 
-    private void ensureRcasConstants(float sharpness) {
-        if (this.conSharpness == sharpness && this.rcasConstants != null) {
+    private void ensureRcasConstants(float sharpness, float adaptiveStrength) {
+        if (this.conSharpness == sharpness && this.conAdaptiveStrength == adaptiveStrength && this.rcasConstants != null) {
             return;
         }
         GpuDevice device = RenderSystem.getDevice();
@@ -132,11 +138,12 @@ public final class Fsr1Pass {
         }
         float strength = (float)Math.pow(2.0, -sharpness);
         ByteBuffer rcas = MemoryUtil.memAlloc((int)16);
-        rcas.putFloat(strength).putFloat(0.0f).putFloat(0.0f).putFloat(0.0f);
+        rcas.putFloat(strength).putFloat(adaptiveStrength).putFloat(0.0f).putFloat(0.0f);
         rcas.flip();
         this.rcasConstants = device.createBuffer(() -> "upshift/rcas-constants", 128, rcas);
         MemoryUtil.memFree((ByteBuffer)rcas);
         this.conSharpness = sharpness;
+        this.conAdaptiveStrength = adaptiveStrength;
     }
 
     public void close() {
@@ -153,5 +160,6 @@ public final class Fsr1Pass {
         this.conOutW = -1;
         this.conOutH = -1;
         this.conSharpness = Float.NaN;
+        this.conAdaptiveStrength = Float.NaN;
     }
 }
