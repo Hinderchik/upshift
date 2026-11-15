@@ -70,7 +70,7 @@ jar {
     from("../../LICENSE") {
         rename { "${it}_${project.base.archivesName.get()}" }
     }
-    from("../../CHANGELOG.md") {
+    from("../CHANGELOG.md") {
         rename { "CHANGELOG_${project.base.archivesName.get()}.md" }
     }
 }

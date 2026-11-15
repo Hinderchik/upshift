@@ -7,8 +7,6 @@ build/
 # NeoForge / MDG
 neoforge/run/
 neoforge/*.log
-neoforge/sodium-neoforge-*.jar
-neoforge/modmenu-*.jar
 neoforge/build/
 neoforge/.gradle/
 neoforge/upshift-vr-edition/run/
@@ -19,8 +17,12 @@ neoforge/upshift-vr-edition/.gradle/
 fabric/dev/
 fabric/run/
 fabric/*.log
+# Only the mod jars the build consumes stay out; build outputs are ignored.
 fabric/*.jar
+!fabric/sodium-fabric-*.jar
 fabric/libs/
+!fabric/libs/
+!fabric/libs/**
 fabric/build/
 fabric/.gradle/
 fabric/META-INF/
@@ -34,7 +36,7 @@ fabric/upshift-vr-edition/*.jar
 fabric/upshift-vr-edition/build_vr_output.txt
 
 # Compiled class files
-net/
+/net/
 *.class
 
 # IDE
