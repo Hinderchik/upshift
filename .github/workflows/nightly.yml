@@ -1,20 +1,44 @@
-name: Upshift Nightly Builds
+name: Upshift Builds
 
 on:
   schedule:
     - cron: '0 2 * * *'  # Daily at 02:00 UTC
   workflow_dispatch:  # Manual trigger
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
 
 permissions:
   contents: read
-  packages: write
+
+concurrency:
+  group: upshift-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-fabric:
-    name: Fabric Build
+  build:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Fabric
+            dir: fabric
+            artifact: upshift-fabric
+          - name: NeoForge
+            dir: neoforge
+            artifact: upshift-neoforge
+          - name: Fabric VR Edition
+            dir: fabric/upshift-vr-edition
+            artifact: upshift-vr-fabric
+          - name: NeoForge VR Edition
+            dir: neoforge/upshift-vr-edition
+            artifact: upshift-vr-neoforge
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up JDK 25
         uses: actions/setup-java@v4
@@ -25,91 +49,18 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build Fabric
-        working-directory: ./fabric
+      - name: Make Gradle wrapper executable
+        working-directory: ./${{ matrix.dir }}
+        run: chmod +x gradlew
+
+      - name: Build ${{ matrix.name }}
+        working-directory: ./${{ matrix.dir }}
         run: ./gradlew --no-daemon build
 
-      - name: Upload Fabric Artifacts
+      - name: Upload ${{ matrix.name }} artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: upshift-fabric-${{ github.run_number }}
-          path: fabric/build/libs/*.jar
-          retention-days: 14
-
-  build-neoforge:
-    name: NeoForge Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 25
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '25'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Build NeoForge
-        working-directory: ./neoforge
-        run: ./gradlew --no-daemon build
-
-      - name: Upload NeoForge Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: upshift-neoforge-${{ github.run_number }}
-          path: neoforge/build/libs/*.jar
-          retention-days: 14
-
-  build-vr-fabric:
-    name: Fabric VR Edition Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 25
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '25'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Build Fabric VR Edition
-        working-directory: ./fabric/upshift-vr-edition
-        run: ./gradlew --no-daemon build
-
-      - name: Upload VR Fabric Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: upshift-vr-fabric-${{ github.run_number }}
-          path: fabric/upshift-vr-edition/build/libs/*.jar
-          retention-days: 14
-
-  build-vr-neoforge:
-    name: NeoForge VR Edition Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 25
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '25'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Build NeoForge VR Edition
-        working-directory: ./neoforge/upshift-vr-edition
-        run: ./gradlew --no-daemon build
-
-      - name: Upload VR NeoForge Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: upshift-vr-neoforge-${{ github.run_number }}
-          path: neoforge/upshift-vr-edition/build/libs/*.jar
+          name: ${{ matrix.artifact }}-${{ github.run_number }}
+          path: ${{ matrix.dir }}/build/libs/*.jar
+          if-no-files-found: error
           retention-days: 14
