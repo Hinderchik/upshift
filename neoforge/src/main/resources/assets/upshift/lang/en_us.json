@@ -79,6 +79,12 @@
   "upshift.tooltip.ai_distance": "Mobs beyond this many blocks from every player are throttled. Mobs closer to any player keep their full AI. 0 turns throttling off.",
   "upshift.option.ai_interval": "AI update rate",
   "upshift.tooltip.ai_interval": "How often distant mobs run a full AI tick. Every 4 ticks is the default: sensing and the goal scan run once, the cheap running-goal pass runs on the others. Higher values save more on big farms but make distant mobs react more slowly.",
+  "upshift.option.animation_whitelist": "Animation whitelist",
+  "upshift.tooltip.animation_whitelist": "Sprites that should always animate, even when animation freezing is active. One per line, supports wildcards: namespace:path, namespace:*, *:path, or * for all. Opens the config file for editing.",
+  "key.upshift.toggle_upscaling": "Toggle Upscaling",
+  "key.category.upshift.controls": "Upshift Controls",
+  "upshift.toggle.paused": "Upscaling paused",
+  "upshift.toggle.active": "Upscaling active",
   "upshift.metadata.mods": "Outdated logoFile metadata: %s. Icons still work.",
   "upshift.metadata.restart": "Warning suppressed; after a restart this problem will not appear."
 }

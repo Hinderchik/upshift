@@ -7,10 +7,12 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleType;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.Vec3;
+import java.util.List;
 
 /**
  * Cheap, frame-local decisions used by the culling mixins.
@@ -30,6 +32,14 @@ public final class ClientOptimizations {
      * block entity, and the distance test below never allocates a Vec3.
      */
     private static Vec3 cameraPos;
+
+    /** Global per-client-tick counter used for animation frame skipping. */
+    private static int upshift$clientTickCounter;
+
+    /** Called once per frame at the start of the client tick. */
+    public static void beginClientTick() {
+        upshift$clientTickCounter++;
+    }
 
     private ClientOptimizations() {
     }
@@ -66,19 +76,55 @@ public final class ClientOptimizations {
     }
 
     /**
-     * @param frameCounter per-atlas counter, incremented once per frame
-     * @return true when this atlas should not advance its animation this frame.
+     * Checks if a sprite's animation should advance this tick.
+     *
+     * @param spriteName the sprite's Identifier (namespace:path)
+     * @return true when the animation should NOT advance this tick (i.e. skip)
      */
-    public static boolean shouldSkipAtlasTick(int frameCounter) {
+    public static boolean shouldAdvanceAnimation(Identifier spriteName) {
         if (ModCompat.skipAnimationFreeze()) {
             return false;
         }
         FsrConfig config = FsrConfig.get();
+
+        // Check whitelist first - whitelisted sprites always animate
+        if (isWhitelisted(spriteName, config.animationWhitelist)) {
+            return false;
+        }
+
+        // Frame skip logic using global counter
         int skip = config.animationFrameSkip;
-        if (skip > 1 && frameCounter % skip != 0) {
+        if (skip > 1 && upshift$clientTickCounter % skip != 0) {
             return true;
         }
+
+        // Unfocused freeze
         return config.freezeAnimationsUnfocused && !Minecraft.getInstance().isWindowActive();
+    }
+
+    /**
+     * Wildcard whitelist matcher.
+     * Supports exact match (namespace:path), prefix (namespace:*), suffix (*:path), and full wildcard (*).
+     */
+    private static boolean isWhitelisted(Identifier spriteName, List<String> whitelist) {
+        if (whitelist == null || whitelist.isEmpty()) {
+            return false;
+        }
+        String full = spriteName.toString(); // namespace:path
+        String path = spriteName.getPath();  // just the path part
+
+        for (String pattern : whitelist) {
+            if (pattern == null || pattern.isEmpty()) continue;
+            if ("*".equals(pattern)) return true;
+            if (full.equals(pattern)) return true;
+            if (pattern.startsWith("*:")) {
+                if (path.equals(pattern.substring(2))) return true;
+            } else if (pattern.endsWith(":*")) {
+                String ns = pattern.substring(0, pattern.length() - 2);
+                if (full.startsWith(ns + ":")) return true;
+            }
+        }
+        return false;
     }
 
     /** Called once per particle tick; the budget is a per-tick budget. */

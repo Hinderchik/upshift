@@ -13,6 +13,8 @@
     "ParticleCullMixin",
     "BlockEntityCullMixin",
     "TextureAtlasMixin",
+    "AnimationStateMixin",
+    "OptionsMixin",
     "TextCacheMixin",
     "FontWidthMixin",
     "MobAiThrottleMixin"

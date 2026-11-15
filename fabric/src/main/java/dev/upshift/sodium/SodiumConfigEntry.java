@@ -51,6 +51,7 @@ implements ConfigEntryPoint {
     private static final Identifier BLOCK_ENTITY_CULL_ID = Identifier.parse((String)"upshift:block_entity_cull");
     private static final Identifier FREEZE_ANIMATIONS_ID = Identifier.parse((String)"upshift:freeze_animations");
     private static final Identifier ANIMATION_SKIP_ID = Identifier.parse((String)"upshift:animation_skip");
+    private static final Identifier ANIMATION_WHITELIST_ID = Identifier.parse((String)"upshift:animation_whitelist");
     private static final Identifier CACHE_TEXT_ID = Identifier.parse((String)"upshift:cache_text");
     private static final Identifier THROTTLE_AI_ID = Identifier.parse((String)"upshift:throttle_ai");
     private static final Identifier AI_DISTANCE_ID = Identifier.parse((String)"upshift:ai_distance");
@@ -353,7 +354,21 @@ implements ConfigEntryPoint {
                                     config.animationFrameSkip = value;
                                 }, () -> config.animationFrameSkip)
                                 .setStorageHandler(config::save)
-                                .setImpact(OptionImpact.LOW)))
+                                .setImpact(OptionImpact.LOW))
+                        .addOption(builder.createExternalButtonOption(ANIMATION_WHITELIST_ID)
+                                .setName(Component.translatable("upshift.option.animation_whitelist"))
+                                .setTooltip(Component.translatable("upshift.tooltip.animation_whitelist"))
+                                .setScreenConsumer(screen -> {
+                                    try {
+                                        java.awt.Desktop.getDesktop().edit(FsrConfig.path().toFile());
+                                    } catch (Exception e) {
+                                        try {
+                                            net.minecraft.util.Util.getPlatform().openFile(FsrConfig.path().toFile());
+                                        } catch (Exception ex) {
+                                            Upshift.LOG.warn("could not open animation whitelist config", ex);
+                                        }
+                                    }
+                                })))
                 .addOptionGroup(builder.createOptionGroup()
                         .setName(Component.translatable("upshift.group.text"))
                         .addOption(builder.createBooleanOption(CACHE_TEXT_ID)

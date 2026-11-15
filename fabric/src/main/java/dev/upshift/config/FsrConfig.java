@@ -17,6 +17,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileAttribute;
+import java.util.ArrayList;
 import java.util.List;
 import net.fabricmc.loader.api.FabricLoader;
 
@@ -56,6 +57,8 @@ public final class FsrConfig {
     public boolean throttleAi = true;
     public int aiThrottleDistance = 48;
     public int aiThrottleInterval = 4;
+    public boolean upscalingPaused = false;
+    public List<String> animationWhitelist = new ArrayList<>();
 
     private FsrConfig() {
         this.startFlusher();
@@ -63,6 +66,10 @@ public final class FsrConfig {
 
     public static FsrConfig get() {
         return INSTANCE;
+    }
+
+    public static Path path() {
+        return PATH;
     }
 
     public void applyQuality(QualityMode mode) {
@@ -181,6 +188,11 @@ public final class FsrConfig {
             this.frameGenMultiplier = 2;
             this.schema = 8;
         }
+        if (this.schema < 9) {
+            this.upscalingPaused = false;
+            this.animationWhitelist = new ArrayList<>();
+            this.schema = 9;
+        }
         if (this.upscaler == null) {
             this.upscaler = Upscaler.FSR1;
         }
@@ -208,6 +220,9 @@ public final class FsrConfig {
         this.aiThrottleDistance = Math.clamp(this.aiThrottleDistance, 0, 128);
         this.aiThrottleInterval = Math.clamp(this.aiThrottleInterval, 1, 20);
         this.frameGenMultiplier = Math.clamp(this.frameGenMultiplier, 1, 4);
+        if (this.animationWhitelist == null) {
+            this.animationWhitelist = new ArrayList<>();
+        }
         // Sharpening-only mode only makes sense at 100% scale
         if (this.sharpeningOnly && this.customScale < 1.0f) {
             this.sharpeningOnly = false;

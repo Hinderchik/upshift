@@ -135,6 +135,9 @@ public final class UpscaleManager {
 
     public boolean scalingActive() {
         FsrConfig config = FsrConfig.get();
+        if (config.upscalingPaused) {
+            return false;
+        }
         if (config.sharpeningOnly && config.customScale >= 1.0f && config.upscaler == Upscaler.SHARPENING) {
             return true;
         }
@@ -152,6 +155,13 @@ public final class UpscaleManager {
                 CpuTuner.get().apply(chosen);
                 Upshift.LOG.info("first launch on {}: {} profile applied", (Object)Capabilities.report().gpu().describe(), (Object)chosen.id());
             }
+        }
+        // If upscaling is paused via hotkey, disable it immediately
+        if (config.upscalingPaused) {
+            this.active = Upscaler.OFF;
+            this.hasPresented = false;
+            this.hasPreviousRotation = false;
+            return null;
         }
         this.active = this.resolve(config);
         if (!this.active.isSpatial() || !this.scalingActive()) {

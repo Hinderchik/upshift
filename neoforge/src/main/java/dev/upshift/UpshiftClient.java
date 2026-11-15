@@ -5,6 +5,8 @@ import dev.upshift.compat.MetadataAudit;
 import dev.upshift.compat.MetadataNotice;
 import dev.upshift.config.FsrConfig;
 import dev.upshift.gpu.Capabilities;
+import dev.upshift.input.ToggleKey;
+import dev.upshift.optim.ClientOptimizations;
 import dev.upshift.overlay.HardwareMonitor;
 import dev.upshift.overlay.PerfStats;
 import java.nio.file.Files;
@@ -15,6 +17,7 @@ import java.util.stream.Collectors;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -22,6 +25,7 @@ import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 
 @EventBusSubscriber(modid = Upshift.MOD_ID, value = Dist.CLIENT)
 public final class UpshiftClient {
@@ -67,6 +71,11 @@ public final class UpshiftClient {
             opener.setDaemon(true);
             opener.start();
         }
+    }
+
+    @SubscribeEvent
+    public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
+        event.register(ToggleKey.MAPPING);
     }
 
     private static void auditMetadata(FsrConfig config) {
