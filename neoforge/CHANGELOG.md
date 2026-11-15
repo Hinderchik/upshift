@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.0 - Hotkey toggle and per-sprite animation whitelist
+
+### Added
+- **Hotkey toggle for upscaling.** Press F9 by default (registered via `RegisterKeyMappingsEvent`) to pause or resume upscaling mid-session without touching settings. The overlay flashes a status message confirming the change. Paused state is saved in the config file and restored on next launch.
+- **Per-sprite animation whitelist.** A new external-button option in Sodium's video settings opens the config JSON directly; each line is a sprite identifier supporting exact matches (`minecraft:lava_flow`), namespace wildcards (`minecraft:*`), path wildcards (`*:anim_*`) and a bare `*` for every sprite. Whitelisted sprites never freeze even when `freezeAnimationsUnfocused` is on, solving cases where lava / water must keep animating behind menus.
+- **Global tick counter for animation frame skipping.** Replaced the per-atlas counter with a single client-tick counter shared across all atlases, giving consistent skip behaviour regardless of how many texture sheets are loaded.
+
+### Changed
+- Animation gating now runs via `SpriteContents$AnimationState.needsToDraw()` instead of cancelling `TextureAtlas.tick`. Sodium's `SpriteContentsTickerMixin` activity tracking continues to work correctly because the ticker still sees every sprite's `tick` call.
+
+---
+
 ## 1.7.0 - Presets, native sharpening, duplicate-mod detection
 
 ### Added
