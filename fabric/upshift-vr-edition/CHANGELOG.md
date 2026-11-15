@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.0 - Fabric build, synced with Upshift 1.7.0
+
+### Added
+- **Fabric build** of the VR Edition alongside the NeoForge build. Same addon,
+  same per-eye upscaling path, published for Fabric 26.2.
+
+### Changed
+- Requires Upshift 1.7.0. The base mod's new performance presets apply to VR as
+  well; the VR addon still keeps one history and one jitter timeline per eye,
+  scales both lenses from a single stereo measurement, and steps aside when the
+  headset does its own reprojection.
+
+---
+
 ## 1.0.0 - Initial VR Edition Release
 
 ### Added

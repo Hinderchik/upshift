@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.7.0 - Presets, native sharpening, duplicate-mod detection
+
+### Added
+- **One-click performance presets.** A new "Performance preset" page now sits
+  first in Sodium's video settings. Balanced, CPU First, GPU First and
+  Integrated graphics each set the internal scale, upscaler, sharpness, target
+  frame rate, entity distance and particle budget in one click. Names and
+  tooltips are localized (English and Russian).
+- **RCAS Sharpening at native resolution.** New upscaler entry
+  `RCAS Sharpening (native res)` plus a "Sharpening only" toggle: the world is
+  drawn at 100% and only the RCAS sharpening pass runs, for players who want a
+  crisp image without dropping resolution. Below 100% internal scale it falls
+  back to FSR 1 so the toggle never leaves the screen unscaled.
+- **Duplicate optimization detection.** When EntityCulling, Lithium, ModernFix or
+  FerriteCore is installed, Upshift disables its own overlapping culling and AI
+  throttling instead of doing the same work twice. Detection is cached at
+  startup and changes no mixins.
+
+### Fixed
+- Russian and English language files are deduplicated (the presets had been
+  added twice), and the `67%%` escape in the resolution tooltip is correct for
+  `String.format`.
+
+---
+
 ## 1.6.6 (NeoForge) - NeoForge 26.2 port
 
 ### Added
