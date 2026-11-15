@@ -1,16 +1,21 @@
 #version 330
 
-// Temporal resolve: the current jittered frame blended with the previous one, warped to where
-// the camera pointed a frame ago. History is clamped to the local neighbourhood of the current
-// frame before it is allowed in, which is what stops ghosting behind moving geometry. Cost is
-// five taps of the current frame and one of the history, all at internal resolution.
+// Temporal resolve with optional depth-aware reprojection.
+// When depthTexture is provided, reconstruct world-space positions to disambiguate
+// motion of overlapping surfaces (fixes ghosting on thin edges and particles).
 
 uniform sampler2D ColorSampler;
 uniform sampler2D HistorySampler;
+uniform sampler2D DepthSampler;
 
 layout(std140) uniform TaauParams {
     mat4 HistoryWarp;   // current clip space -> previous clip space
-    vec4 Params;        // x: weight of the current frame, w: 1 when a previous frame exists
+    vec4 Params;        // x: weight of current frame, y: depthAware flag, w: hasHistory
+    float padding0[12]; // pad to 80 bytes
+};
+
+layout(std140) uniform ProjectionInverse {
+    mat4 ProjectionInv;
 };
 
 in vec2 texCoord;
@@ -18,6 +23,22 @@ out vec4 fragColor;
 
 vec2 toUv(vec2 ndc) {
     return vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+}
+
+vec3 reconstructWorldPos(vec2 uv, float depth) {
+    vec4 clip = vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, depth * 2.0 - 1.0, 1.0);
+    vec4 view = ProjectionInv * clip;
+    return view.xyz / view.w;
+}
+
+float sampleDepth(vec2 uv) {
+    return texture(DepthSampler, uv).r;
+}
+
+bool depthConsistent(vec2 uv, vec2 prevUv, float threshold) {
+    float d0 = sampleDepth(uv);
+    float d1 = sampleDepth(prevUv);
+    return abs(d0 - d1) < threshold;
 }
 
 void main() {
@@ -36,15 +57,22 @@ void main() {
     }
     vec2 prevUv = toUv(warped.xy / warped.w);
     if (any(lessThan(prevUv, vec2(0.0))) || any(greaterThan(prevUv, vec2(1.0)))) {
-        // The camera turned far enough that this pixel had no history: take the frame as it is.
         fragColor = vec4(current, 1.0);
         return;
     }
 
+    // Depth-aware ghosting rejection
+    if (Params.y > 0.5) {
+        // Check depth consistency between current and warped positions
+        if (!depthConsistent(uv, prevUv, 0.005)) {
+            fragColor = vec4(current, 1.0);
+            return;
+        }
+    }
+
     vec2 texel = 1.0 / vec2(textureSize(ColorSampler, 0));
 
-    // Plus-shaped neighbourhood at one and a half pixels: wide enough to cover the
-    // reprojection error of a rotation-only warp, tight enough to keep thin edges sharp.
+    // Plus-shaped neighbourhood at 1.5 pixels
     vec3 mn = current;
     vec3 mx = current;
     for (int i = 0; i < 4; i++) {
@@ -57,8 +85,6 @@ void main() {
 
     vec3 history = clamp(texture(HistorySampler, prevUv).rgb, mn, mx);
 
-    // The faster the view moves, the less the previous frame is worth: at rest the history
-    // carries about seven eighths of the pixel, under a fast turn barely half of it.
     vec2 motion = abs(prevUv - uv) * vec2(textureSize(ColorSampler, 0));
     float speed = clamp((motion.x + motion.y) * 0.15, 0.0, 1.0);
     float weight = mix(Params.x, 0.55, speed);

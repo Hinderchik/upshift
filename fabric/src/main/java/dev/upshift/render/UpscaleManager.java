@@ -245,7 +245,17 @@ public final class UpscaleManager {
                     this.previousRotation.set((Matrix4fc)this.rotationScratch);
                     this.hasPreviousRotation = true;
                 }
-                source = this.taau.resolve(RenderSystem.getDevice().createCommandEncoder(), source, this.worldTarget.width, this.worldTarget.height, this.pristineProjection, this.rotationScratch, this.previousRotation, 0.12f);
+                // Use depth-aware resolve if main has depth buffer
+                GpuTextureView depthTexture = main.getDepthTextureView();
+                if (depthTexture != null) {
+                    // Invert the current projection for depth reconstruction
+                    Matrix4f projInv = new Matrix4f(this.pristineProjection).invert();
+                    CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
+                    source = this.taau.resolveDepthAware(encoder, source, this.worldTarget.width, this.worldTarget.height,
+                        this.pristineProjection, this.rotationScratch, this.previousRotation, 0.12f, depthTexture, projInv);
+                } else {
+                    source = this.taau.resolve(RenderSystem.getDevice().createCommandEncoder(), source, this.worldTarget.width, this.worldTarget.height, this.pristineProjection, this.rotationScratch, this.previousRotation, 0.12f);
+                }
                 this.previousRotation.set((Matrix4fc)this.rotationScratch);
                 if (this.taau.isBroken()) {
                     this.active = Upscaler.OFF;

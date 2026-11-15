@@ -34,7 +34,9 @@ public final class TaauPass {
     private GpuTextureView lastOutput;
     private boolean hasHistory;
     private GpuBuffer params;
+    private GpuBuffer projectionInverseBuffer;
     private final ByteBuffer data = MemoryUtil.memAlloc((int)80);
+    private ByteBuffer projectionInverseData;
     private final boolean[] broken = new boolean[1];
     private final Matrix4f warp = new Matrix4f();
     private final Matrix4f rotationInverse = new Matrix4f();
@@ -42,9 +44,23 @@ public final class TaauPass {
 
     public static synchronized List<RenderPipeline> pipelines() {
         if (pipeline == null) {
-            BindGroupLayout layout = BindGroupLayout.builder().withSampler("ColorSampler").withSampler("HistorySampler").withUniform("TaauParams", UniformType.UNIFORM_BUFFER).build();
+            BindGroupLayout layout = BindGroupLayout.builder()
+                .withSampler("ColorSampler")
+                .withSampler("HistorySampler")
+                .withSampler("DepthSampler")
+                .withUniform("TaauParams", UniformType.UNIFORM_BUFFER)
+                .withUniform("ProjectionInverse", UniformType.UNIFORM_BUFFER)
+                .build();
             ColorTargetState target = new ColorTargetState(Optional.empty(), GpuFormat.RGBA8_UNORM, 15);
-            pipeline = RenderPipeline.builder((RenderPipeline.Snippet[])new RenderPipeline.Snippet[0]).withLocation(Identifier.parse((String)"upshift:pipeline/taau_resolve")).withVertexShader(Identifier.parse((String)"upshift:core/screenquad")).withFragmentShader(Identifier.parse((String)"upshift:core/taau_resolve")).withBindGroupLayout(layout).withColorTargetState(target).withPrimitiveTopology(PrimitiveTopology.TRIANGLES).withCull(false).build();
+            pipeline = RenderPipeline.builder((RenderPipeline.Snippet[])new RenderPipeline.Snippet[0])
+                .withLocation(Identifier.parse((String)"upshift:pipeline/taau_resolve"))
+                .withVertexShader(Identifier.parse((String)"upshift:core/screenquad"))
+                .withFragmentShader(Identifier.parse((String)"upshift:core/taau_resolve"))
+                .withBindGroupLayout(layout)
+                .withColorTargetState(target)
+                .withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
+                .withCull(false)
+                .build();
         }
         return List.of(pipeline);
     }
@@ -62,6 +78,14 @@ public final class TaauPass {
     }
 
     public GpuTextureView resolve(CommandEncoder encoder, GpuTextureView current, int w, int h, Matrix4f projection, Matrix4f rotation, Matrix4f previous, float currentWeight) {
+        return resolveInternal(encoder, current, w, h, projection, rotation, previous, currentWeight, null, null);
+    }
+
+    public GpuTextureView resolveDepthAware(CommandEncoder encoder, GpuTextureView current, int w, int h, Matrix4f projection, Matrix4f rotation, Matrix4f previous, float currentWeight, GpuTextureView depthTexture, Matrix4f projectionInverse) {
+        return resolveInternal(encoder, current, w, h, projection, rotation, previous, currentWeight, depthTexture, projectionInverse);
+    }
+
+    private GpuTextureView resolveInternal(CommandEncoder encoder, GpuTextureView current, int w, int h, Matrix4f projection, Matrix4f rotation, Matrix4f previous, float currentWeight, GpuTextureView depthTexture, Matrix4f projectionInverse) {
         if (this.broken[0] || current == null) {
             return current;
         }
@@ -70,22 +94,37 @@ public final class TaauPass {
             this.writeIndex ^= 1;
             GpuTextureView destination = this.views[this.writeIndex];
             GpuTextureView source = this.views[this.writeIndex ^ 1];
+
+            // Compute warp matrix: current clip space -> previous clip space
             Matrix4f warp = this.warp.set((Matrix4fc)projection).mul((Matrix4fc)previous).mul((Matrix4fc)this.rotationInverse.set((Matrix4fc)rotation).invert()).mul((Matrix4fc)this.projectionInverse.set((Matrix4fc)projection).invert());
+
             this.data.clear();
             warp.get(0, this.data);
             this.data.position(64);
             this.data.putFloat(currentWeight);
-            this.data.putFloat(0.0f);
+            this.data.putFloat(depthTexture != null ? 1.0f : 0.0f); // y: depthAware flag
             this.data.putFloat(0.0f);
             this.data.putFloat(this.hasHistory ? 1.0f : 0.0f);
             this.data.position(0).limit(80);
             this.ensureBuffer();
             encoder.writeToBuffer(this.params.slice(), this.data);
+
             GpuSampler sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
             try (RenderPass pass = encoder.createRenderPass(() -> "upshift/taau", destination, Optional.empty())) {
                 pass.setPipeline(pipeline);
                 pass.bindTexture("ColorSampler", current, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
                 pass.bindTexture("HistorySampler", source, sampler);
+                if (depthTexture != null) {
+                    pass.bindTexture("DepthSampler", depthTexture, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+                }
+                if (projectionInverse != null) {
+                    // upload projection inverse for depth reconstruction
+                    this.projectionInverseData.clear();
+                    projectionInverse.get(0, this.projectionInverseData);
+                    this.ensureProjectionInverseBuffer();
+                    encoder.writeToBuffer(this.projectionInverseBuffer.slice(), this.projectionInverseData);
+                    pass.setUniform("ProjectionInverse", this.projectionInverseBuffer);
+                }
                 pass.setUniform("TaauParams", this.params);
                 pass.draw(3, 1, 0, 0);
             }
@@ -98,6 +137,14 @@ public final class TaauPass {
             Upshift.LOG.error("temporal resolve failed; falling back to a plain resize", t);
             return current;
         }
+    }
+
+    private void ensureProjectionInverseBuffer() {
+        if (this.projectionInverseBuffer != null) {
+            return;
+        }
+        this.projectionInverseData = MemoryUtil.memAlloc((int)64);
+        this.projectionInverseBuffer = RenderSystem.getDevice().createBuffer(() -> "upshift/taau-proj-inv", 136, this.projectionInverseData);
     }
 
     private void ensure(int w, int h) {
@@ -145,6 +192,14 @@ public final class TaauPass {
         if (this.params != null) {
             this.params.close();
             this.params = null;
+        }
+        if (this.projectionInverseBuffer != null) {
+            this.projectionInverseBuffer.close();
+            this.projectionInverseBuffer = null;
+        }
+        if (this.projectionInverseData != null) {
+            MemoryUtil.memFree(this.projectionInverseData);
+            this.projectionInverseData = null;
         }
     }
 }
