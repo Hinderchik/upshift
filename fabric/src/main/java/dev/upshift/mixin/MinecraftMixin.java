@@ -54,6 +54,9 @@ public abstract class MinecraftMixin {
             config.upscalingPaused = !config.upscalingPaused;
             config.save();
 
+            String state = config.upscalingPaused ? "paused" : "active";
+            dev.upshift.Upshift.LOG.info("toggle upscaling: {}", state);
+
             Minecraft minecraft = Minecraft.getInstance();
             if (minecraft.player != null) {
                 Component msg = Component.translatable(
