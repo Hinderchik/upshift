@@ -10,8 +10,7 @@ uniform sampler2D DepthSampler;
 
 layout(std140) uniform TaauParams {
     mat4 HistoryWarp;   // current clip space -> previous clip space
-    vec4 Params;        // x: weight of current frame, y: depthAware flag, w: hasHistory
-    float padding0[12]; // pad to 80 bytes
+    vec4 Params;        // x: weight of current frame, y: depthAware flag, z: zZeroToOne, w: hasHistory
 };
 
 layout(std140) uniform ProjectionInverse {
@@ -26,8 +25,14 @@ vec2 toUv(vec2 ndc) {
 }
 
 vec3 reconstructWorldPos(vec2 uv, float depth) {
-    vec4 clip = vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, depth * 2.0 - 1.0, 1.0);
+    // Convert stored depth to NDC z. For Vulkan ([0,1]) use depth directly,
+    // for OpenGL ([-1,1]) use depth*2-1.
+    float ndcZ = mix(depth * 2.0 - 1.0, depth, Params.z);
+    vec4 clip = vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, ndcZ, 1.0);
     vec4 view = ProjectionInv * clip;
+    if (view.w <= 0.0) {
+        return vec3(0.0); // behind camera or degenerate
+    }
     return view.xyz / view.w;
 }
 
@@ -35,10 +40,17 @@ float sampleDepth(vec2 uv) {
     return texture(DepthSampler, uv).r;
 }
 
+float linearDepth(vec2 uv) {
+    vec3 pos = reconstructWorldPos(uv, sampleDepth(uv));
+    return length(pos); // distance from camera
+}
+
 bool depthConsistent(vec2 uv, vec2 prevUv, float threshold) {
-    float d0 = sampleDepth(uv);
-    float d1 = sampleDepth(prevUv);
-    return abs(d0 - d1) < threshold;
+    float dHere = linearDepth(uv);
+    float dThere = linearDepth(prevUv);
+    // Compare in linear view-space distance; allow a small fraction of the
+    // distance as tolerance (helps with reversed-Z and near-plane nonlinearity).
+    return abs(dHere - dThere) < max(threshold, dHere * 0.03);
 }
 
 void main() {

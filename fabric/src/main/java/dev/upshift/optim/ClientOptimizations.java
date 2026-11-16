@@ -181,12 +181,15 @@ public final class ClientOptimizations {
     }
 
     /**
-     * @param dx entity X minus camera X
-     * @param dy entity Y minus camera Y
-     * @param dz entity Z minus camera Z
+     * Distance and visibility test for entities. The distance is measured against the
+     * camera the renderer is actually using, never against the world origin: vanilla's
+     * {@code shouldRender} arguments are absolute camera coordinates, so reusing them as
+     * if they were offsets would cull every entity once the player walks more than the
+     * limit away from (0, 0, 0).
+     *
      * @return true when the entity should be skipped entirely.
      */
-    public static boolean cullEntity(Entity entity, double dx, double dy, double dz) {
+    public static boolean cullEntity(Entity entity) {
         if (ModCompat.skipEntityCull()) {
             return false;
         }
@@ -202,9 +205,17 @@ public final class ClientOptimizations {
             return true;
         }
         int limit = config.entityCullDistance;
-        if (limit > 0) {
-            return dx * dx + dy * dy + dz * dz > (double) limit * limit;
+        if (limit <= 0) {
+            return false;
         }
-        return false;
+        Camera camera = minecraft.gameRenderer.mainCamera();
+        if (camera == null || !camera.isInitialized()) {
+            return false;
+        }
+        Vec3 pos = camera.position();
+        double dx = entity.getX() - pos.x;
+        double dy = entity.getY() - pos.y;
+        double dz = entity.getZ() - pos.z;
+        return dx * dx + dy * dy + dz * dz > (double) limit * limit;
     }
 }

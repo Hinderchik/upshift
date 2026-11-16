@@ -38,6 +38,7 @@ public final class TaauPass {
     private final ByteBuffer data = MemoryUtil.memAlloc((int)80);
     private ByteBuffer projectionInverseData;
     private final boolean[] broken = new boolean[1];
+    private boolean zZeroToOne;
     private final Matrix4f warp = new Matrix4f();
     private final Matrix4f rotationInverse = new Matrix4f();
     private final Matrix4f projectionInverse = new Matrix4f();
@@ -90,6 +91,11 @@ public final class TaauPass {
             return current;
         }
         try {
+            // Reversed-Z (Vulkan on Intel/NVIDIA/AMD) stores near=1, far=0, so a depth
+            // sampled from the buffer must be flipped before it can be used as NDC z in
+            // clip space. Read the device's convention once per resolve instead of
+            // hard-coding the OpenGL range.
+            this.zZeroToOne = RenderSystem.getDevice().getDeviceInfo().isZZeroToOne();
             this.ensure(w, h);
             this.writeIndex ^= 1;
             GpuTextureView destination = this.views[this.writeIndex];
@@ -105,7 +111,8 @@ public final class TaauPass {
             this.data.putFloat(depthTexture != null ? 1.0f : 0.0f); // y: depthAware flag
             this.data.putFloat(0.0f);
             this.data.putFloat(this.hasHistory ? 1.0f : 0.0f);
-            this.data.position(0).limit(80);
+            this.data.putFloat(this.zZeroToOne ? 1.0f : 0.0f); // z: depth convention flag
+            this.data.position(0).limit(84);
             this.ensureBuffer();
             encoder.writeToBuffer(this.params.slice(), this.data);
 

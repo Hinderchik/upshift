@@ -84,5 +84,16 @@
   "upshift.preset.balanced": "Balanced",
   "upshift.preset.cpu_first": "CPU First",
   "upshift.preset.gpu_first": "GPU First",
-  "upshift.preset.integrated": "Integrated Graphics"
+  "upshift.preset.integrated": "Integrated Graphics",
+  "upshift.option.anr_download": "Download ANR FG package",
+  "upshift.tooltip.anr_download": "Downloads the official Apex Neural Rendering frame generation package (anr-fg-*-full.zip) from GitHub. You will be asked to confirm before anything is downloaded; the archive is verified with SHA-256 before it is unpacked. After the package is staged, run its install.cmd in the game's .exe folder and restart the game.",
+  "upshift.option.anr_folder": "Open ANR FG package folder",
+  "upshift.tooltip.anr_folder": "Folder holding the staged ANR FG package (%s). Run install.cmd in the game's .exe folder and restart the game.",
+  "upshift.anr.consent.title": "Download third-party native code?",
+  "upshift.anr.consent.message": "Upshift will download the official ANR FG package from GitHub (apex-compute/ANR). It contains native DLLs and shaders that run on your GPU. The archive is verified with SHA-256 before it is unpacked. Nothing is executed by the mod itself - you still have to run install.cmd in the game's .exe folder and restart the game.",
+  "upshift.anr.consent.yes": "Download",
+  "upshift.anr.consent.no": "Cancel",
+  "upshift.anr.started": "ANR FG package download started...",
+  "upshift.anr.done": "ANR FG package staged at %s. Run install.cmd in the game's .exe folder and restart the game.",
+  "upshift.anr.failed": "ANR FG download failed: %s"
 }

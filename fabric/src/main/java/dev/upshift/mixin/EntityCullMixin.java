@@ -16,9 +16,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(value={EntityRenderDispatcher.class})
 public abstract class EntityCullMixin {
     @Inject(method={"shouldRender"}, at={@At(value="HEAD")}, cancellable=true)
-    private void upshift$cullEntity(Entity entity, Frustum frustum, double x, double y, double z,
+    private void upshift$cullEntity(Entity entity, Frustum frustum, double cameraX, double cameraY, double cameraZ,
                                     CallbackInfoReturnable<Boolean> callback) {
-        if (ClientOptimizations.cullEntity(entity, x, y, z)) {
+        if (ClientOptimizations.cullEntity(entity)) {
             callback.setReturnValue(false);
         }
     }

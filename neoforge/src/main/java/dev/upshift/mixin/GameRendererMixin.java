@@ -23,6 +23,13 @@ public abstract class GameRendererMixin {
     @Unique
     private RenderTarget upshift$windowTarget;
 
+    /**
+     * The window target (full-resolution render target) for use by other mixins.
+     */
+    public RenderTarget getUpshiftWindowTarget() {
+        return this.upshift$windowTarget;
+    }
+
     @Inject(method={"renderLevel"}, at={@At(value="HEAD")}, cancellable=true)
     private void upshift$beginWorld(DeltaTracker tracker, CallbackInfo ci) {
         UpscaleManager.get().probeFps();

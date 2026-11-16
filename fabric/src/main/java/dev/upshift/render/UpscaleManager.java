@@ -245,8 +245,8 @@ public final class UpscaleManager {
                     this.previousRotation.set((Matrix4fc)this.rotationScratch);
                     this.hasPreviousRotation = true;
                 }
-                // Use depth-aware resolve if main has depth buffer
-                GpuTextureView depthTexture = main.getDepthTextureView();
+                // Use captured depth (saved before hands/always-on-top cleared it)
+                GpuTextureView depthTexture = this.getCapturedDepth();
                 if (depthTexture != null) {
                     // Invert the current projection for depth reconstruction
                     Matrix4f projInv = new Matrix4f(this.pristineProjection).invert();
@@ -365,7 +365,77 @@ public final class UpscaleManager {
         return Upscaler.OFF;
     }
 
-    public void ensureWorldTarget(int width, int height) {
+    /**
+ * Called from LevelRendererMixin immediately after the world is rendered,
+ * before hands / always-on-top clear the depth. Copies the depth buffer
+ * into a persistent texture so TAAU can use it later.
+ */
+public void captureDepth(RenderTarget source) {
+    if (this.worldTarget == null || this.active != Upscaler.TAAU) {
+        return;
+    }
+    GpuDevice device = RenderSystem.getDevice();
+    GpuTextureView srcDepth = source.getDepthTextureView();
+    if (srcDepth == null) {
+        return;
+    }
+    if (this.capturedDepth == null ||
+        this.capturedDepthW != this.worldTarget.width ||
+        this.capturedDepthH != this.worldTarget.height) {
+        this.closeCapturedDepth();
+        int usage = 8;
+        this.capturedDepth = device.createTexture("upshift/captured-depth", usage, GpuFormat.D32_FLOAT, this.worldTarget.width, this.worldTarget.height, 1, 1);
+        this.capturedDepthView = device.createTextureView(this.capturedDepth);
+        this.capturedDepthW = this.worldTarget.width;
+        this.capturedDepthH = this.worldTarget.height;
+    }
+    CommandEncoder encoder = device.createCommandEncoder();
+    // Copy the depth attachment from source to our persistent texture.
+    // copyTextureToTexture signature: (src, dst, mipLevel, srcX, srcY, dstX, dstY, width, height)
+    encoder.copyTextureToTexture(
+        source.getDepthTexture(),
+        this.capturedDepth,
+        0,
+        0, 0,
+        0, 0,
+        this.capturedDepthW,
+        this.capturedDepthH
+    );
+    this.hasCapturedDepth = true;
+}
+
+/**
+ * Returns the internal world render target for depth capture from LevelRendererMixin.
+ */
+public RenderTarget getWorldTargetForDepthCapture() {
+    return this.worldTarget;
+}
+
+private void closeCapturedDepth() {
+    if (this.capturedDepthView != null) {
+        this.capturedDepthView.close();
+        this.capturedDepthView = null;
+    }
+    if (this.capturedDepth != null) {
+        this.capturedDepth.close();
+        this.capturedDepth = null;
+    }
+    this.capturedDepthW = -1;
+    this.capturedDepthH = -1;
+    this.hasCapturedDepth = false;
+}
+
+public GpuTextureView getCapturedDepth() {
+    return this.hasCapturedDepth ? this.capturedDepthView : null;
+}
+
+private GpuTexture capturedDepth;
+private GpuTextureView capturedDepthView;
+private int capturedDepthW = -1;
+private int capturedDepthH = -1;
+private boolean hasCapturedDepth;
+
+public void ensureWorldTarget(int width, int height) {
         ++this.frame;
         long key = (long)width << 32 | (long)height & 0xFFFFFFFFL;
         CachedTarget cached = this.targetCache.get(key);
@@ -424,6 +494,7 @@ public final class UpscaleManager {
 
     public void close() {
         this.closeIntermediate();
+        this.closeCapturedDepth();
         this.taau.close();
         this.hasPreviousRotation = false;
         this.hasPresented = false;
