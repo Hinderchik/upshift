@@ -123,6 +123,12 @@ public final class UpscaleManager {
         if (camera == null || !camera.initialized) {
             return;
         }
+        // Restore the clean projection from the previous frame before applying new jitter.
+        // This prevents jitter accumulation across frames which would break the projection.
+        if (this.hasPreviousRotation) {
+            camera.projectionMatrix.set((Matrix4fc)this.pristineProjection);
+        }
+        // Save the clean matrix for TAAU resolve and for next frame's restore.
         this.pristineProjection.set((Matrix4fc)camera.projectionMatrix);
         float[] offset = JITTER[this.jitterIndex++ & 7];
         float x = (offset[0] - 0.5f) * 2.0f / (float)width;
@@ -161,10 +167,12 @@ public final class UpscaleManager {
             this.active = Upscaler.OFF;
             this.hasPresented = false;
             this.hasPreviousRotation = false;
+            this.restoreCameraProjection(); // restore clean projection
             return null;
         }
         this.active = this.resolve(config);
         if (!this.active.isSpatial() || !this.scalingActive()) {
+            this.restoreCameraProjection(); // restore clean projection
             return null;
         }
         if (config.menuBoost && !this.blurHandled) {
@@ -177,13 +185,26 @@ public final class UpscaleManager {
             this.ensureWorldTarget(internal[0], internal[1]);
             if (this.active == Upscaler.TAAU) {
                 this.applyJitter(internal[0], internal[1]);
+            } else {
+                // Not using TAAU - ensure camera projection is clean
+                this.restoreCameraProjection();
             }
             return this.worldTarget;
         }
         catch (Throwable t) {
             Upshift.LOG.error("could not allocate the internal render target; staying at native resolution", t);
             this.active = Upscaler.OFF;
+            this.restoreCameraProjection();
             return null;
+        }
+    }
+
+    private void restoreCameraProjection() {
+        if (this.hasPreviousRotation) {
+            CameraRenderState camera = Minecraft.getInstance().gameRenderer.gameRenderState().levelRenderState.cameraRenderState;
+            if (camera != null && camera.initialized) {
+                camera.projectionMatrix.set((Matrix4fc)this.pristineProjection);
+            }
         }
     }
 
@@ -259,10 +280,13 @@ public final class UpscaleManager {
                 this.previousRotation.set((Matrix4fc)this.rotationScratch);
                 if (this.taau.isBroken()) {
                     this.active = Upscaler.OFF;
+                    this.restoreCameraProjection();
                     return;
                 }
             }
             this.jitterValid = false;
+            // Restore clean camera projection for the next frame
+            this.restoreCameraProjection();
             if (this.present(main, source)) {
                 this.hasPresented = true;
             }
