@@ -276,11 +276,25 @@ implements ConfigEntryPoint {
         if (AnrDetector.isSupported()) {
             Upshift.LOG.info("ANR FG offered: {}", AnrDetector.getReason());
             if (AnrDownloader.isInstalled()) {
-                frameGenGroup.addOption(builder.createExternalButtonOption(ANR_FOLDER_ID)
-                        .setName(Component.translatable("upshift.option.anr_folder"))
-                        .setTooltip(Component.translatable("upshift.tooltip.anr_folder",
-                                String.valueOf((Object)AnrDownloader.installedVersion())))
-                        .setScreenConsumer(screen -> this.openAnrFolder()));
+                if (AnrDownloader.isLayerInstalled()) {
+                    frameGenGroup.addOption(builder.createExternalButtonOption(ANR_FOLDER_ID)
+                            .setName(Component.translatable("upshift.option.anr_layer_active"))
+                            .setTooltip(Component.translatable("upshift.tooltip.anr_layer_active",
+                                    AnrDownloader.installedVersion()))
+                            .setScreenConsumer(screen -> this.openAnrFolder()));
+                    frameGenGroup.addOption(builder.createExternalButtonOption(ANR_FOLDER_ID)
+                            .setName(Component.translatable("upshift.option.anr_uninstall"))
+                            .setTooltip(Component.translatable("upshift.tooltip.anr_uninstall"))
+                            .setScreenConsumer(screen -> {
+                                AnrDownloader.uninstallLayer();
+                                this.notifyPlayer(Component.translatable("upshift.anr.uninstalled").withStyle(ChatFormatting.YELLOW));
+                            }));
+                } else {
+                    frameGenGroup.addOption(builder.createExternalButtonOption(ANR_DOWNLOAD_ID)
+                            .setName(Component.translatable("upshift.option.anr_install_layer"))
+                            .setTooltip(Component.translatable("upshift.tooltip.anr_install_layer"))
+                            .setScreenConsumer(this::askAnrConsent));
+                }
             } else {
                 frameGenGroup.addOption(builder.createExternalButtonOption(ANR_DOWNLOAD_ID)
                         .setName(Component.translatable("upshift.option.anr_download"))

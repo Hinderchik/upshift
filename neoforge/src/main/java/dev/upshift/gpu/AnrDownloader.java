@@ -23,14 +23,12 @@ import java.util.zip.ZipInputStream;
 import net.minecraft.client.Minecraft;
 
 /**
- * Downloads the official ANR FG package (Apex Neural Rendering frame generation) on demand.
+ * Downloads and installs the official ANR FG package (Apex Neural Rendering frame generation)
+ * as a user-level Vulkan implicit layer. No install.cmd needed, no admin rights required.
  *
- * <p>The download only starts after the player explicitly accepts the consent screen.
- * Every archive is verified against the SHA-256 digest that GitHub publishes for the
- * release asset before anything is extracted. The package itself is installed by its
- * own {@code install.cmd} / {@code install.sh}; a mod cannot drop a swap-chain proxy
- * into the game process safely, so the mod only stages a verified copy and points the
- * player at the installer.</p>
+ * <p>The layer is registered in {@code %APPDATA%/vulkan/implicit_layer.d/} with an executable
+ * filter matching the actual javaw.exe used by the launcher (ElyPrismLauncher, PrismLauncher,
+ * MultiMC, vanilla, etc.). This works per-user and takes effect on next game launch.</p>
  */
 public final class AnrDownloader {
     private static final String API_LATEST = "https://api.github.com/repos/apex-compute/ANR/releases/latest";
@@ -38,6 +36,7 @@ public final class AnrDownloader {
     private static final String FALLBACK_URL = "https://github.com/apex-compute/ANR/releases/download/FG-V.B18/anr-fg-V.B18-full.zip";
     private static final String FALLBACK_SHA256 = "ed70eef1dc92ba71685daad59f1d9ef1d9897b46df009f04b1dc51c4933cd300";
     private static final String MARKER_FILE = "upshift-anr.txt";
+    private static final String LAYER_MANIFEST_NAME = "vk_layer_anr_fg.json";
     private static final long MAX_ARCHIVE_BYTES = 256L * 1024L * 1024L;
 
     private static final Object LOCK = new Object();
@@ -52,6 +51,7 @@ public final class AnrDownloader {
     private static volatile String installedVersion = null;
     private static volatile Path installedRoot = null;
     private static volatile boolean userConsented = false;
+    private static volatile boolean layerInstalled = false;
     private static CompletableFuture<Boolean> inFlight = null;
 
     static {
@@ -66,29 +66,21 @@ public final class AnrDownloader {
     }
 
     public enum DownloadState {
-        /** Nothing downloaded yet. */
         NOT_STARTED,
-        /** Waiting for the player to accept the consent screen. */
         AWAITING_CONSENT,
-        /** Asking GitHub for the newest release. */
         RESOLVING,
-        /** Streaming the archive. */
         DOWNLOADING,
-        /** Checking the SHA-256 digest. */
         VERIFYING,
-        /** Unpacking the verified archive. */
         EXTRACTING,
-        /** Package verified and staged on disk. */
+        INSTALLING_LAYER,
         COMPLETED,
-        /** Something failed; see {@link #getLastError()}. */
         FAILED;
 
         public boolean busy() {
-            return this == RESOLVING || this == DOWNLOADING || this == VERIFYING || this == EXTRACTING;
+            return this == RESOLVING || this == DOWNLOADING || this == VERIFYING || this == EXTRACTING || this == INSTALLING_LAYER;
         }
     }
 
-    /** Records the player's explicit agreement to download third-party native code. */
     public static void giveConsent() {
         userConsented = true;
         if (state == DownloadState.AWAITING_CONSENT) {
@@ -96,9 +88,10 @@ public final class AnrDownloader {
         }
     }
 
-    /** Drops the consent flag and forgets the in-memory state. The staged package stays on disk. */
     public static void revokeConsent() {
         userConsented = false;
+        // Also uninstall the layer if present
+        uninstallLayer();
         reset();
     }
 
@@ -106,16 +99,16 @@ public final class AnrDownloader {
         return userConsented;
     }
 
-    /**
-     * Starts (or joins) the download. Returns {@code false} immediately when the player
-     * has not accepted the consent screen yet.
-     */
+    public static boolean isLayerInstalled() {
+        return layerInstalled;
+    }
+
     public static CompletableFuture<Boolean> ensureDownloaded() {
         if (!userConsented) {
             state = DownloadState.AWAITING_CONSENT;
             return CompletableFuture.completedFuture(false);
         }
-        if (isInstalled()) {
+        if (isInstalled() && isLayerInstalled()) {
             return CompletableFuture.completedFuture(true);
         }
         synchronized (LOCK) {
@@ -124,12 +117,12 @@ public final class AnrDownloader {
             }
             state = DownloadState.RESOLVING;
             lastError = "";
-            inFlight = CompletableFuture.supplyAsync(AnrDownloader::runDownload, EXECUTOR);
+            inFlight = CompletableFuture.supplyAsync(AnrDownloader::runDownloadAndInstall, EXECUTOR);
             return inFlight;
         }
     }
 
-    private static boolean runDownload() {
+    private static boolean runDownloadAndInstall() {
         Path base = getBaseDirectory();
         Path archive = null;
         try {
@@ -160,17 +153,22 @@ public final class AnrDownloader {
             state = DownloadState.EXTRACTING;
             Path packageDir = findPackageRoot(extract(archive, versionDir.resolve("package")));
 
+            // Install as Vulkan implicit layer
+            state = DownloadState.INSTALLING_LAYER;
+            installVulkanLayer(packageDir, release.tag());
+
             Files.writeString(packageDir.resolve(MARKER_FILE), release.tag() + System.lineSeparator(),
                 StandardCharsets.UTF_8);
             installedVersion = release.tag();
             installedRoot = packageDir;
+            layerInstalled = true;
             state = DownloadState.COMPLETED;
-            Upshift.LOG.info("ANR FG: package {} staged at {}", release.tag(), packageDir);
+            Upshift.LOG.info("ANR FG: package {} installed as Vulkan layer", release.tag());
             return true;
         } catch (Throwable t) {
             state = DownloadState.FAILED;
             lastError = t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
-            Upshift.LOG.error("ANR FG download failed: {}", lastError, t);
+            Upshift.LOG.error("ANR FG download/install failed: {}", lastError, t);
             return false;
         } finally {
             if (archive != null) {
@@ -313,6 +311,182 @@ public final class AnrDownloader {
         return builder.toString();
     }
 
+    /**
+     * Installs the ANR FG package as a user-level Vulkan implicit layer.
+     * Copies dxgi.dll (the OptiScaler Vulkan layer) + shaders/config to a staging folder,
+     * and writes a vk_layer_anr_fg.json manifest in %APPDATA%/vulkan/implicit_layer.d/
+     * with an executable filter for the detected javaw.exe.
+     */
+    private static void installVulkanLayer(Path packageDir, String version) throws IOException {
+        // 1. Locate the layer DLL (dxgi.dll in ANR FG package)
+        Path sourceDll = packageDir.resolve("game").resolve("dxgi.dll");
+        if (!Files.exists(sourceDll)) {
+            // Fallback: maybe in OptiScaler/custom/Apex Neural Rendering FG/dlssg/
+            sourceDll = packageDir.resolve("game")
+                .resolve("OptiScaler")
+                .resolve("custom")
+                .resolve("Apex Neural Rendering FG")
+                .resolve("dlssg")
+                .resolve("nvngx_dlssg.dll");
+        }
+        if (!Files.exists(sourceDll)) {
+            throw new IOException("Could not find ANR FG layer DLL in package");
+        }
+
+        // 2. Determine target staging directory for the layer
+        Path layerStagingDir = getBaseDirectory().resolve("layer").resolve(version);
+        Files.createDirectories(layerStagingDir);
+
+        // 3. Copy the layer DLL
+        Path targetDll = layerStagingDir.resolve("anr_fg_layer.dll");
+        Files.copy(sourceDll, targetDll, StandardCopyOption.REPLACE_EXISTING);
+        Upshift.LOG.info("ANR FG: copied layer DLL to {}", targetDll);
+
+        // 4. Copy shaders/config folder (OptiScaler/custom/Apex Neural Rendering FG)
+        Path sourceConfig = packageDir.resolve("game")
+            .resolve("OptiScaler")
+            .resolve("custom")
+            .resolve("Apex Neural Rendering FG");
+        if (Files.exists(sourceConfig)) {
+            Path targetConfig = layerStagingDir.resolve("config");
+            copyDirectory(sourceConfig, targetConfig);
+            Upshift.LOG.info("ANR FG: copied config to {}", targetConfig);
+        }
+
+        // 5. Detect the javaw.exe used by the launcher
+        String javawPath = detectJavawPath();
+        Upshift.LOG.info("ANR FG: detected javaw.exe for layer filter: {}", javawPath);
+
+        // 6. Write the implicit layer manifest
+        Path implicitLayerDir = getImplicitLayerDir();
+        Files.createDirectories(implicitLayerDir);
+        Path manifestPath = implicitLayerDir.resolve(LAYER_MANIFEST_NAME);
+        writeLayerManifest(manifestPath, targetDll.toString(), layerStagingDir.toString(), javawPath, version);
+        Upshift.LOG.info("ANR FG: wrote Vulkan implicit layer manifest to {}", manifestPath);
+    }
+
+    private static String detectJavawPath() {
+        // 1. Try java.home (most reliable for current JVM)
+        String javaHome = System.getProperty("java.home");
+        if (javaHome != null) {
+            Path candidate = Path.of(javaHome, "bin", "javaw.exe");
+            if (Files.exists(candidate)) {
+                return candidate.toAbsolutePath().toString();
+            }
+        }
+
+        // 2. Try Minecraft's game directory + common launcher structures
+        try {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc != null && mc.gameDirectory != null) {
+                Path gameDir = mc.gameDirectory.toPath();
+
+                // ElyPrismLauncher: java/java-runtime-*/bin/javaw.exe
+                Path elyJava = gameDir.getParent().resolve("java");
+                if (Files.exists(elyJava)) {
+                    try (var stream = Files.walk(elyJava, 4)) {
+                        for (Path p : stream.toList()) {
+                            if (p.getFileName().toString().equalsIgnoreCase("javaw.exe")) {
+                                return p.toAbsolutePath().toString();
+                            }
+                        }
+                    }
+                }
+
+                // PrismLauncher / MultiMC: same structure
+                // Vanilla: no embedded java, fall back to java.home
+            }
+        } catch (Throwable ignored) {
+        }
+
+        // 3. Fallback: just "javaw.exe" (will match any javaw.exe in PATH)
+        return "javaw.exe";
+    }
+
+    private static Path getImplicitLayerDir() {
+        String appData = System.getenv("APPDATA");
+        if (appData != null) {
+            return Path.of(appData, "vulkan", "implicit_layer.d");
+        }
+        // Linux/macOS fallback (not really used for Minecraft on Windows)
+        String home = System.getProperty("user.home");
+        if (home != null) {
+            return Path.of(home, ".local", "share", "vulkan", "implicit_layer.d");
+        }
+        return Path.of(".", "vulkan", "implicit_layer.d");
+    }
+
+    private static void writeLayerManifest(Path manifestPath, String dllPath, String configDir, String javawExe, String version) throws IOException {
+        // Escape backslashes for JSON
+        String dllEscaped = dllPath.replace("\\", "\\\\");
+        String configEscaped = configDir.replace("\\", "\\\\");
+        String javawEscaped = javawPathForFilter(javawExe);
+
+        String json = """
+            {
+              "file_format_version" : "1.0.0",
+              "layer" : {
+                "name" : "VK_LAYER_ANR_FG",
+                "type" : "GLOBAL",
+                "library_path" : "%s",
+                "api_version" : "1.3.0",
+                "implementation_version" : "1",
+                "description" : "Apex Neural Rendering Frame Generation (ANR FG) via OptiScaler",
+                "enable_environment" : {
+                  "ANR_FG_CONFIG_DIR" : "%s"
+                },
+                "disable_environment" : {
+                  "DISABLE_ANR_FG" : "1"
+                },
+                "filter" : {
+                  "executable" : "%s"
+                }
+              }
+            }
+            """.formatted(dllEscaped, configEscaped, javawEscaped);
+
+        Files.writeString(manifestPath, json, StandardCharsets.UTF_8);
+    }
+
+    private static String javawPathForFilter(String javawPath) {
+        // For the filter, we want just the executable name if it's a standard javaw.exe
+        // or the full path if it's a custom launcher java
+        if (javawPath == null || javawPath.equals("javaw.exe")) {
+            return "javaw.exe";
+        }
+        // Use full path with escaped backslashes
+        return javawPath.replace("\\", "\\\\");
+    }
+
+    private static void copyDirectory(Path source, Path target) throws IOException {
+        Files.walk(source).forEach(src -> {
+            try {
+                Path dest = target.resolve(source.relativize(src));
+                if (Files.isDirectory(src)) {
+                    Files.createDirectories(dest);
+                } else {
+                    Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING);
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    /** Uninstalls the Vulkan implicit layer manifest. */
+    public static void uninstallLayer() {
+        try {
+            Path manifestPath = getImplicitLayerDir().resolve(LAYER_MANIFEST_NAME);
+            if (Files.exists(manifestPath)) {
+                Files.delete(manifestPath);
+                Upshift.LOG.info("ANR FG: removed Vulkan implicit layer manifest");
+            }
+        } catch (IOException e) {
+            Upshift.LOG.warn("ANR FG: failed to remove layer manifest", e);
+        }
+        layerInstalled = false;
+    }
+
     private static void scanInstalled() {
         Path base = getBaseDirectory();
         if (!Files.isDirectory(base)) {
@@ -347,9 +521,11 @@ public final class AnrDownloader {
             state = DownloadState.COMPLETED;
             Upshift.LOG.info("ANR FG package {} is staged at {}", bestVersion, bestRoot);
         }
+        // Check if layer manifest exists
+        Path manifestPath = getImplicitLayerDir().resolve(LAYER_MANIFEST_NAME);
+        layerInstalled = Files.exists(manifestPath);
     }
 
-    /** Root folder that holds one sub-folder per downloaded ANR release. */
     public static Path getBaseDirectory() {
         try {
             Minecraft minecraft = Minecraft.getInstance();
@@ -361,7 +537,6 @@ public final class AnrDownloader {
         return Path.of(System.getProperty("user.home"), ".upshift", "anr");
     }
 
-    /** Folder of the staged package, or the root folder when nothing is installed yet. */
     public static Path getInstallDirectory() {
         Path root = installedRoot;
         return root != null ? root : getBaseDirectory();
@@ -389,8 +564,11 @@ public final class AnrDownloader {
         if (current.busy()) {
             return current.name().toLowerCase();
         }
-        if (isInstalled()) {
-            return installedVersion == null ? "staged" : installedVersion;
+        if (isInstalled() && isLayerInstalled()) {
+            return installedVersion == null ? "installed" : installedVersion + " (layer active)";
+        }
+        if (isInstalled() && !isLayerInstalled()) {
+            return installedVersion + " (layer pending)";
         }
         if (current == DownloadState.FAILED) {
             return "failed: " + lastError;
@@ -401,7 +579,6 @@ public final class AnrDownloader {
         return "not downloaded";
     }
 
-    /** Forgets the in-memory download state so a retry can start from scratch. */
     public static void reset() {
         synchronized (LOCK) {
             inFlight = null;
