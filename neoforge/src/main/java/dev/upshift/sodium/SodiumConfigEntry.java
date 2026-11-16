@@ -5,11 +5,14 @@ import dev.upshift.config.FrameGen;
 import dev.upshift.config.FsrConfig;
 import dev.upshift.config.QualityMode;
 import dev.upshift.config.Upscaler;
+import dev.upshift.gpu.AnrDetector;
+import dev.upshift.gpu.AnrDownloader;
 import dev.upshift.gpu.Capabilities;
 import dev.upshift.gpu.CapabilityReport;
 import dev.upshift.overlay.OverlayMode;
 import dev.upshift.perf.CpuTuner;
 import dev.upshift.perf.PerfProfile;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Function;
@@ -18,11 +21,15 @@ import net.caffeinemc.mods.sodium.api.config.option.ControlValueFormatter;
 import net.caffeinemc.mods.sodium.api.config.option.OptionImpact;
 import net.caffeinemc.mods.sodium.api.config.structure.ConfigBuilder;
 import net.caffeinemc.mods.sodium.api.config.structure.ModOptionsBuilder;
+import net.caffeinemc.mods.sodium.api.config.structure.OptionGroupBuilder;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.ConfirmScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.Util;
 
 public final class SodiumConfigEntry
 implements ConfigEntryPoint {
@@ -35,6 +42,8 @@ implements ConfigEntryPoint {
     private static final Identifier EXPERIMENTAL_ID = Identifier.parse((String)"upshift:experimental_backends");
     private static final Identifier FRAMEGEN_ID = Identifier.parse((String)"upshift:frame_gen");
     private static final Identifier FG_MULTIPLIER_ID = Identifier.parse((String)"upshift:fg_multiplier");
+    private static final Identifier ANR_DOWNLOAD_ID = Identifier.parse((String)"upshift:anr_download");
+    private static final Identifier ANR_FOLDER_ID = Identifier.parse((String)"upshift:anr_folder");
     private static final Identifier OVERLAY_ID = Identifier.parse((String)"upshift:debug_overlay");
     private static final Identifier PROFILE_ID = Identifier.parse((String)"upshift:profile");
     private static final Identifier DYNAMIC_ID = Identifier.parse((String)"upshift:dynamic_scale");
@@ -226,45 +235,62 @@ implements ConfigEntryPoint {
                                 }, () -> config.overlay.ordinal())
                                 .setStorageHandler(config::save)
                                 .setImpact(OptionImpact.LOW))));
+        OptionGroupBuilder frameGenGroup = builder.createOptionGroup()
+                .setName(Component.translatable("upshift.group.frame_gen"))
+                .addOption(builder.createIntegerOption(FRAMEGEN_ID)
+                        .setName(Component.translatable("upshift.option.frame_gen"))
+                        .setTooltip(Component.translatable("upshift.tooltip.frame_gen"))
+                        .setDefaultValue(Integer.valueOf(0))
+                        .setRange(0, Math.max(0, frameGens.size() - 1), 1)
+                        .setValueFormatter(names(frameGens, FrameGen::id))
+                        .setBinding(index -> {
+                            config.frameGen = frameGens.get(clamp(index, frameGens.size()));
+                        }, () -> Math.max(0, frameGens.indexOf(config.frameGen)))
+                        .setStorageHandler(config::save)
+                        .setImpact(OptionImpact.HIGH))
+                .addOption(builder.createIntegerOption(FG_MULTIPLIER_ID)
+                        .setName(Component.translatable("upshift.option.fg_multiplier"))
+                        .setTooltip(Component.translatable("upshift.tooltip.fg_multiplier"))
+                        .setDefaultValue(Integer.valueOf(2))
+                        .setRange(1, 4, 1)
+                        .setValueFormatter(value -> Component.literal(value + "x"))
+                        .setBinding(value -> {
+                            config.frameGenMultiplier = value;
+                        }, () -> Math.clamp(config.frameGenMultiplier, 1, 4))
+                        .setStorageHandler(config::save)
+                        .setImpact(OptionImpact.MEDIUM))
+                .addOption(builder.createBooleanOption(FG_FORCE_ID)
+                        .setName(Component.translatable("upshift.option.fg_force"))
+                        .setTooltip(Component.translatable("upshift.tooltip.fg_force"))
+                        .setDefaultValue(Boolean.valueOf(false))
+                        .setBinding(value -> {
+                            config.frameGenForce = value;
+                        }, () -> config.frameGenForce)
+                        .setStorageHandler(config::save)
+                        .setImpact(OptionImpact.MEDIUM))
+                .addOption(builder.createExternalButtonOption(REPORT_ID)
+                        .setName(Component.translatable("upshift.option.report"))
+                        .setTooltip(Component.translatable("upshift.tooltip.report"))
+                        .setScreenConsumer(screen -> this.dumpReport()));
+        // The ANR entry and its button are only offered when the GPU is on the official whitelist.
+        if (AnrDetector.isSupported()) {
+            Upshift.LOG.info("ANR FG offered: {}", AnrDetector.getReason());
+            if (AnrDownloader.isInstalled()) {
+                frameGenGroup.addOption(builder.createExternalButtonOption(ANR_FOLDER_ID)
+                        .setName(Component.translatable("upshift.option.anr_folder"))
+                        .setTooltip(Component.translatable("upshift.tooltip.anr_folder",
+                                String.valueOf((Object)AnrDownloader.installedVersion())))
+                        .setScreenConsumer(screen -> this.openAnrFolder()));
+            } else {
+                frameGenGroup.addOption(builder.createExternalButtonOption(ANR_DOWNLOAD_ID)
+                        .setName(Component.translatable("upshift.option.anr_download"))
+                        .setTooltip(Component.translatable("upshift.tooltip.anr_download"))
+                        .setScreenConsumer(this::askAnrConsent));
+            }
+        }
         modOptions.addPage(builder.createOptionPage()
                 .setName(Component.translatable("upshift.page.frame_gen"))
-                .addOptionGroup(builder.createOptionGroup()
-                        .setName(Component.translatable("upshift.group.frame_gen"))
-                        .addOption(builder.createIntegerOption(FRAMEGEN_ID)
-                                .setName(Component.translatable("upshift.option.frame_gen"))
-                                .setTooltip(Component.translatable("upshift.tooltip.frame_gen"))
-                                .setDefaultValue(Integer.valueOf(0))
-                                .setRange(0, Math.max(0, frameGens.size() - 1), 1)
-                                .setValueFormatter(names(frameGens, FrameGen::id))
-                                .setBinding(index -> {
-                                    config.frameGen = frameGens.get(clamp(index, frameGens.size()));
-                                }, () -> Math.max(0, frameGens.indexOf(config.frameGen)))
-                                .setStorageHandler(config::save)
-                                .setImpact(OptionImpact.HIGH))
-                        .addOption(builder.createIntegerOption(FG_MULTIPLIER_ID)
-                                .setName(Component.translatable("upshift.option.fg_multiplier"))
-                                .setTooltip(Component.translatable("upshift.tooltip.fg_multiplier"))
-                                .setDefaultValue(Integer.valueOf(2))
-                                .setRange(1, 4, 1)
-                                .setValueFormatter(value -> Component.literal(value + "x"))
-                                .setBinding(value -> {
-                                    config.frameGenMultiplier = value;
-                                }, () -> Math.clamp(config.frameGenMultiplier, 1, 4))
-                                .setStorageHandler(config::save)
-                                .setImpact(OptionImpact.MEDIUM))
-                        .addOption(builder.createBooleanOption(FG_FORCE_ID)
-                                .setName(Component.translatable("upshift.option.fg_force"))
-                                .setTooltip(Component.translatable("upshift.tooltip.fg_force"))
-                                .setDefaultValue(Boolean.valueOf(false))
-                                .setBinding(value -> {
-                                    config.frameGenForce = value;
-                                }, () -> config.frameGenForce)
-                                .setStorageHandler(config::save)
-                                .setImpact(OptionImpact.MEDIUM))
-                        .addOption(builder.createExternalButtonOption(REPORT_ID)
-                                .setName(Component.translatable("upshift.option.report"))
-                                .setTooltip(Component.translatable("upshift.tooltip.report"))
-                                .setScreenConsumer(screen -> this.dumpReport()))));
+                .addOptionGroup(frameGenGroup));
         modOptions.addPage(builder.createOptionPage()
                 .setName(Component.translatable("upshift.page.optimizations"))
                 .addOptionGroup(builder.createOptionGroup()
@@ -449,7 +475,13 @@ implements ConfigEntryPoint {
                 FrameGen frameGen = (FrameGen)value;
                 CapabilityReport.Row<FrameGen> row = Capabilities.report().row(frameGen);
                 if (row.state() == CapabilityReport.State.BLOCKED) {
-                    return Component.literal(frameGenLabel(frameGen) + " - needs native core");
+                    String suffix;
+                    if (frameGen == FrameGen.ANR) {
+                        suffix = AnrDownloader.isInstalled() ? " - package staged" : " - download needed";
+                    } else {
+                        suffix = " - needs native core";
+                    }
+                    return Component.literal(frameGenLabel(frameGen) + suffix);
                 }
                 return Component.literal(frameGenLabel(frameGen));
             }
@@ -498,8 +530,55 @@ implements ConfigEntryPoint {
             case FSR_FG -> "FSR frame generation";
             case DLSS_FG -> "DLSS frame generation";
             case XESS_FG -> "XeSS frame generation";
-            case ANR -> "ANR (AMD FidelityFX Frame Gen)";
+            case ANR -> "ANR FG (external add-on)";
         };
+    }
+
+    /**
+     * Shows the consent screen before anything is downloaded. The player has to press
+     * "Download" in that screen; closing it or pressing "Cancel" leaves the mod untouched.
+     */
+    private void askAnrConsent(Screen parent) {
+        Minecraft minecraft = Minecraft.getInstance();
+        ConfirmScreen consent = new ConfirmScreen(accepted -> {
+            minecraft.setScreenAndShow(parent);
+            if (!accepted) {
+                return;
+            }
+            AnrDownloader.giveConsent();
+            this.notifyPlayer(Component.translatable("upshift.anr.started").withStyle(ChatFormatting.AQUA));
+            AnrDownloader.ensureDownloaded().thenAccept(success -> minecraft.execute(() -> {
+                if (success) {
+                    this.notifyPlayer(Component.translatable("upshift.anr.done", AnrDownloader.getInstallDirectory().toString()).withStyle(ChatFormatting.GREEN));
+                } else {
+                    this.notifyPlayer(Component.translatable("upshift.anr.failed", AnrDownloader.getLastError()).withStyle(ChatFormatting.RED));
+                }
+            }));
+        },
+            Component.translatable("upshift.anr.consent.title"),
+            Component.translatable("upshift.anr.consent.message"),
+            Component.translatable("upshift.anr.consent.yes"),
+            Component.translatable("upshift.anr.consent.no"));
+        // setDelay() must be called AFTER init() (which creates yesButton/noButton),
+        // but we can't hook into that here. Skip it; the explicit consent is sufficient.
+        minecraft.setScreenAndShow(consent);
+    }
+
+    private void openAnrFolder() {
+        Path directory = AnrDownloader.getInstallDirectory();
+        try {
+            Util.getPlatform().openPath(directory);
+        } catch (Throwable t) {
+            Upshift.LOG.warn("could not open the ANR folder {}", directory, t);
+        }
+    }
+
+    private void notifyPlayer(Component message) {
+        Upshift.LOG.info(message.getString());
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player != null) {
+            player.sendSystemMessage(message);
+        }
     }
 
     private void dumpReport() {

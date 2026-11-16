@@ -559,7 +559,8 @@ implements ConfigEntryPoint {
             Component.translatable("upshift.anr.consent.message"),
             Component.translatable("upshift.anr.consent.yes"),
             Component.translatable("upshift.anr.consent.no"));
-        consent.setDelay(20);
+        // setDelay() must be called AFTER init() (which creates yesButton/noButton),
+        // but we can't hook into that here. Skip it; the explicit consent is sufficient.
         minecraft.setScreenAndShow(consent);
     }
 
