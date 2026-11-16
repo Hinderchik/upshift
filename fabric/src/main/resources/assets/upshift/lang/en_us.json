@@ -102,5 +102,14 @@
   "upshift.anr.started": "ANR FG package download started...",
   "upshift.anr.done": "ANR FG Vulkan layer installed at %s. Restart the game to activate it.",
   "upshift.anr.failed": "ANR FG download/install failed: %s",
-  "upshift.anr.uninstalled": "ANR FG Vulkan layer uninstalled. Restart the game to deactivate it."
+  "upshift.anr.uninstalled": "ANR FG Vulkan layer uninstalled. Restart the game to deactivate it.",
+  "upshift.group.frame_gen_available": "Available Frame Generators",
+  "upshift.group.frame_gen_unavailable": "Unavailable (missing runtime)",
+  "upshift.group.frame_gen_settings": "Frame Generation Settings",
+  "upshift.group.anr": "ANR FG (AMD FidelityFX)",
+  "upshift.tooltip.fg_unavailable": "This frame generator is not available: %s. Install the required runtime or update drivers to enable it.",
+  "upshift.option.fg_none_unavailable": "All frame generators available",
+  "upshift.tooltip.fg_none_unavailable": "No unavailable frame generators on this system.",
+  "upshift.option.anr_unsupported": "ANR FG not supported on this GPU",
+  "upshift.tooltip.anr_unsupported": "Your GPU (%s) is not on the ANR FG whitelist. Supported: NVIDIA RTX 20/30/40/50 + GTX 16, AMD RX 5000/6000/7000/9000, Intel Arc A/B, Steam Deck."
 }

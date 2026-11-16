@@ -13,6 +13,7 @@ import dev.upshift.overlay.OverlayMode;
 import dev.upshift.perf.CpuTuner;
 import dev.upshift.perf.PerfProfile;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Function;
@@ -46,8 +47,6 @@ implements ConfigEntryPoint {
     private static final Identifier ANR_FOLDER_ID = Identifier.parse((String)"upshift:anr_folder");
     private static final Identifier OVERLAY_ID = Identifier.parse((String)"upshift:debug_overlay");
     private static final Identifier PROFILE_ID = Identifier.parse((String)"upshift:profile");
-    private static final Identifier DYNAMIC_ID = Identifier.parse((String)"upshift:dynamic_scale");
-    private static final Identifier TARGET_ID = Identifier.parse((String)"upshift:target_fps");
     private static final Identifier REPORT_ID = Identifier.parse((String)"upshift:report");
     private static final Identifier FG_FORCE_ID = Identifier.parse((String)"upshift:fg_force");
     private static final Identifier MENU_BOOST_ID = Identifier.parse((String)"upshift:menu_boost");
@@ -96,28 +95,6 @@ implements ConfigEntryPoint {
                                 .setImpact(OptionImpact.HIGH))));
         modOptions.addPage(builder.createOptionPage()
                 .setName(Component.translatable("upshift.page.upscaling"))
-                .addOptionGroup(builder.createOptionGroup()
-                        .setName(Component.translatable("upshift.group.profile"))
-                        .addOption(builder.createBooleanOption(DYNAMIC_ID)
-                                .setName(Component.translatable("upshift.option.dynamic"))
-                                .setTooltip(Component.translatable("upshift.tooltip.dynamic"))
-                                .setDefaultValue(Boolean.valueOf(true))
-                                .setBinding(value -> {
-                                    config.dynamicScale = value;
-                                }, () -> config.dynamicScale)
-                                .setStorageHandler(config::save)
-                                .setImpact(OptionImpact.MEDIUM))
-                        .addOption(builder.createIntegerOption(TARGET_ID)
-                                .setName(Component.translatable("upshift.option.target_fps"))
-                                .setTooltip(Component.translatable("upshift.tooltip.target_fps"))
-                                .setDefaultValue(Integer.valueOf(60))
-                                .setRange(30, 300, 5)
-                                .setValueFormatter(value -> Component.literal(value + " fps"))
-                                .setBinding(value -> {
-                                    config.targetFps = value;
-                                }, () -> config.targetFps)
-                                .setStorageHandler(config::save)
-                                .setImpact(OptionImpact.MEDIUM)))
                 .addOptionGroup(builder.createOptionGroup()
                         .setName(Component.translatable("upshift.group.upscaler"))
                         .addOption(builder.createIntegerOption(UPSCALER_ID)
@@ -235,19 +212,57 @@ implements ConfigEntryPoint {
                                 }, () -> config.overlay.ordinal())
                                 .setStorageHandler(config::save)
                                 .setImpact(OptionImpact.LOW))));
-        OptionGroupBuilder frameGenGroup = builder.createOptionGroup()
-                .setName(Component.translatable("upshift.group.frame_gen"))
+        // Split frame generators into available (runnable) and unavailable
+        List<FrameGen> runnableFrameGens = report.runnableFrameGenerators();
+        final List<FrameGen> effectiveRunnableFrameGens = runnableFrameGens.isEmpty()
+            ? List.of(FrameGen.INTERNAL)
+            : runnableFrameGens;
+        List<FrameGen> unavailableFrameGens = new ArrayList<>(report.offeredFrameGenerators());
+        unavailableFrameGens.removeAll(effectiveRunnableFrameGens);
+
+        // Group 1: Available frame generators (runnable)
+        OptionGroupBuilder availableFgGroup = builder.createOptionGroup()
+                .setName(Component.translatable("upshift.group.frame_gen_available"))
                 .addOption(builder.createIntegerOption(FRAMEGEN_ID)
                         .setName(Component.translatable("upshift.option.frame_gen"))
                         .setTooltip(Component.translatable("upshift.tooltip.frame_gen"))
                         .setDefaultValue(Integer.valueOf(0))
-                        .setRange(0, Math.max(0, frameGens.size() - 1), 1)
-                        .setValueFormatter(names(frameGens, FrameGen::id))
+                        .setRange(0, Math.max(0, effectiveRunnableFrameGens.size() - 1), 1)
+                        .setValueFormatter(names(effectiveRunnableFrameGens, FrameGen::id))
                         .setBinding(index -> {
-                            config.frameGen = frameGens.get(clamp(index, frameGens.size()));
-                        }, () -> Math.max(0, frameGens.indexOf(config.frameGen)))
+                            config.frameGen = effectiveRunnableFrameGens.get(clamp(index, effectiveRunnableFrameGens.size()));
+                        }, () -> Math.max(0, effectiveRunnableFrameGens.indexOf(config.frameGen)))
                         .setStorageHandler(config::save)
-                        .setImpact(OptionImpact.HIGH))
+                        .setImpact(OptionImpact.HIGH));
+
+        // Group 2: Unavailable frame generators (disabled, with reason)
+        OptionGroupBuilder unavailableFgGroup = builder.createOptionGroup()
+                .setName(Component.translatable("upshift.group.frame_gen_unavailable"));
+        for (FrameGen fg : unavailableFrameGens) {
+            CapabilityReport.Row<FrameGen> row = report.row(fg);
+            String reason = row.detail().isEmpty() ? row.state().name() : row.detail();
+            Component name = Component.literal(frameGenLabel(fg));
+            Component tooltip = Component.translatable("upshift.tooltip.fg_unavailable", reason);
+            String optId = "upshift:fg_unavailable_" + fg.id();
+            unavailableFgGroup.addOption(builder.createIntegerOption(Identifier.parse(optId))
+                    .setName(name)
+                    .setTooltip(tooltip)
+                    .setDefaultValue(Integer.valueOf(0))
+                    .setRange(0, 0, 1)
+                    .setEnabled(false)
+                    .setValueFormatter(idx -> name));
+        }
+        if (unavailableFrameGens.isEmpty()) {
+            unavailableFgGroup.addOption(builder.createBooleanOption(Identifier.parse("upshift:fg_none_unavailable"))
+                    .setName(Component.translatable("upshift.option.fg_none_unavailable"))
+                    .setTooltip(Component.translatable("upshift.tooltip.fg_none_unavailable"))
+                    .setDefaultValue(Boolean.valueOf(false))
+                    .setEnabled(false));
+        }
+
+        // Group 3: Frame generation settings
+        OptionGroupBuilder fgSettingsGroup = builder.createOptionGroup()
+                .setName(Component.translatable("upshift.group.frame_gen_settings"))
                 .addOption(builder.createIntegerOption(FG_MULTIPLIER_ID)
                         .setName(Component.translatable("upshift.option.fg_multiplier"))
                         .setTooltip(Component.translatable("upshift.tooltip.fg_multiplier"))
@@ -272,17 +287,20 @@ implements ConfigEntryPoint {
                         .setName(Component.translatable("upshift.option.report"))
                         .setTooltip(Component.translatable("upshift.tooltip.report"))
                         .setScreenConsumer(screen -> this.dumpReport()));
-        // The ANR entry and its button are only offered when the GPU is on the official whitelist.
+
+        // Group 4: ANR specific (only when GPU supported)
+        OptionGroupBuilder anrGroup = builder.createOptionGroup()
+                .setName(Component.translatable("upshift.group.anr"));
         if (AnrDetector.isSupported()) {
             Upshift.LOG.info("ANR FG offered: {}", AnrDetector.getReason());
             if (AnrDownloader.isInstalled()) {
                 if (AnrDownloader.isLayerInstalled()) {
-                    frameGenGroup.addOption(builder.createExternalButtonOption(ANR_FOLDER_ID)
+                    anrGroup.addOption(builder.createExternalButtonOption(ANR_FOLDER_ID)
                             .setName(Component.translatable("upshift.option.anr_layer_active"))
                             .setTooltip(Component.translatable("upshift.tooltip.anr_layer_active",
                                     AnrDownloader.installedVersion()))
                             .setScreenConsumer(screen -> this.openAnrFolder()));
-                    frameGenGroup.addOption(builder.createExternalButtonOption(ANR_FOLDER_ID)
+                    anrGroup.addOption(builder.createExternalButtonOption(ANR_FOLDER_ID)
                             .setName(Component.translatable("upshift.option.anr_uninstall"))
                             .setTooltip(Component.translatable("upshift.tooltip.anr_uninstall"))
                             .setScreenConsumer(screen -> {
@@ -290,21 +308,31 @@ implements ConfigEntryPoint {
                                 this.notifyPlayer(Component.translatable("upshift.anr.uninstalled").withStyle(ChatFormatting.YELLOW));
                             }));
                 } else {
-                    frameGenGroup.addOption(builder.createExternalButtonOption(ANR_DOWNLOAD_ID)
+                    anrGroup.addOption(builder.createExternalButtonOption(ANR_DOWNLOAD_ID)
                             .setName(Component.translatable("upshift.option.anr_install_layer"))
                             .setTooltip(Component.translatable("upshift.tooltip.anr_install_layer"))
                             .setScreenConsumer(this::askAnrConsent));
                 }
             } else {
-                frameGenGroup.addOption(builder.createExternalButtonOption(ANR_DOWNLOAD_ID)
+                anrGroup.addOption(builder.createExternalButtonOption(ANR_DOWNLOAD_ID)
                         .setName(Component.translatable("upshift.option.anr_download"))
                         .setTooltip(Component.translatable("upshift.tooltip.anr_download"))
                         .setScreenConsumer(this::askAnrConsent));
             }
+        } else {
+            anrGroup.addOption(builder.createExternalButtonOption(ANR_DOWNLOAD_ID)
+                    .setName(Component.translatable("upshift.option.anr_unsupported"))
+                    .setTooltip(Component.translatable("upshift.tooltip.anr_unsupported",
+                            AnrDetector.getReason()))
+                    .setEnabled(false));
         }
+
         modOptions.addPage(builder.createOptionPage()
                 .setName(Component.translatable("upshift.page.frame_gen"))
-                .addOptionGroup(frameGenGroup));
+                .addOptionGroup(availableFgGroup)
+                .addOptionGroup(unavailableFgGroup)
+                .addOptionGroup(fgSettingsGroup)
+                .addOptionGroup(anrGroup));
         modOptions.addPage(builder.createOptionPage()
                 .setName(Component.translatable("upshift.page.optimizations"))
                 .addOptionGroup(builder.createOptionGroup()
