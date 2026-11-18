@@ -77,7 +77,7 @@ public final class FrameGenPresenter {
     private int outputH = -1;
 
     private GpuBuffer warpBuffer;
-    private final ByteBuffer matrixData = MemoryUtil.memAlloc(64);
+    private final ByteBuffer matrixData = MemoryUtil.memAlloc(80);
     private final Matrix4f matrix = new Matrix4f();
     private final Matrix4f source = new Matrix4f();
     private final Matrix4f sourceInverse = new Matrix4f();
@@ -208,7 +208,7 @@ public final class FrameGenPresenter {
                 return;
             }
             this.relative.set((Quaternionfc)this.worldRotation[previous]).conjugate().mul((Quaternionfc)this.worldRotation[this.slot]);
-            if (stepAngle(this.relative) < 0.001f) {
+            if (FrameGenMath.stepAngle(this.relative) < 0.001f) {
                 blit.blit(surface, encoder, realView);
                 return;
             }
@@ -232,7 +232,12 @@ public final class FrameGenPresenter {
                 this.matrix.set((Matrix4fc)this.projection).mul((Matrix4fc)this.source).mul((Matrix4fc)this.stepInverse).mul((Matrix4fc)this.sourceInverse).mul((Matrix4fc)this.projectionInverse);
                 this.matrixData.clear();
                 this.matrix.get(0, this.matrixData);
-                this.matrixData.position(0).limit(64);
+                this.matrixData.position(64);
+                this.matrixData.putFloat(motionView != null ? 1.0f : 0.0f);
+                this.matrixData.putFloat(fraction);
+                this.matrixData.putFloat(0.0f);
+                this.matrixData.putFloat(0.0f);
+                this.matrixData.position(0).limit(80);
 
                 if (paced) {
                     long deadline = base + (long)index * period;
@@ -259,7 +264,11 @@ public final class FrameGenPresenter {
                     pass.bindTexture("GuiSampler", realView, sampler);
                     pass.bindTexture("WorldSampler", maskView, sampler);
                     if (motionView != null) {
-                        pass.bindTexture("MotionSampler", motionView, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+                        pass.bindTexture("MotionSampler", motionView, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
+                    } else {
+                        // The shader ignores this sampler when motion vectors are unavailable,
+                        // but the bind group still requires a texture.
+                        pass.bindTexture("MotionSampler", maskView, sampler);
                     }
                     pass.setUniform("WarpParams", this.warpBuffer);
                     pass.draw(3, 1, 0, 0);
@@ -480,11 +489,6 @@ public final class FrameGenPresenter {
         }
     }
 
-    private static float stepAngle(Quaternionf quaternion) {
-        float w = Math.min(1.0f, Math.abs(quaternion.w));
-        return 2.0f * (float)Math.acos(w);
-    }
-
     private boolean ensureOutput(int width, int height) {
         if (this.outputView != null && this.outputW == width && this.outputH == height) {
             return true;
@@ -561,11 +565,12 @@ public final class FrameGenPresenter {
         if (this.warpBuffer != null) {
             return;
         }
-        ByteBuffer empty = MemoryUtil.memAlloc(64);
+        ByteBuffer empty = MemoryUtil.memAlloc(80);
         empty.putFloat(1.0f).putFloat(0.0f).putFloat(0.0f).putFloat(0.0f);
         empty.putFloat(0.0f).putFloat(1.0f).putFloat(0.0f).putFloat(0.0f);
         empty.putFloat(0.0f).putFloat(0.0f).putFloat(1.0f).putFloat(0.0f);
         empty.putFloat(0.0f).putFloat(0.0f).putFloat(0.0f).putFloat(1.0f);
+        empty.putFloat(0.0f).putFloat(0.0f).putFloat(0.0f).putFloat(0.0f);
         empty.flip();
         this.warpBuffer = RenderSystem.getDevice().createBuffer(() -> "upshift/fgr-params", 136, empty);
         MemoryUtil.memFree(empty);

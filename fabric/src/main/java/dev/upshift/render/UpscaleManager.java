@@ -36,6 +36,7 @@ import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 import org.joml.Quaternionf;
 import org.joml.Quaternionfc;
+import org.joml.Vector3f;
 
 public final class UpscaleManager {
     private static final UpscaleManager INSTANCE = new UpscaleManager();
@@ -46,9 +47,11 @@ public final class UpscaleManager {
     public static final float[][] JITTER = new float[][]{{0.5f, 0.333f}, {0.25f, 0.667f}, {0.75f, 0.111f}, {0.125f, 0.444f}, {0.625f, 0.778f}, {0.375f, 0.222f}, {0.875f, 0.556f}, {0.062f, 0.889f}};
     public final Matrix4f pristineProjection = new Matrix4f();
     public final Matrix4f previousRotation = new Matrix4f();
-    public final Matrix4f previousProjection = new Matrix4f(); // NEW: store previous projection for motion vectors
+    public final Matrix4f previousProjection = new Matrix4f(); // previous frame projection for motion vectors
     public final Matrix4f rotationScratch = new Matrix4f();
     public final Quaternionf rotationQuat = new Quaternionf();
+    public final Vector3f previousCameraPos = new Vector3f();
+    public final Vector3f currentCameraPos = new Vector3f();
     public final int[] sizeScratch = new int[2];
     public boolean hasPreviousRotation;
     public boolean jitterValid;
@@ -82,6 +85,7 @@ public final class UpscaleManager {
     private GpuTextureView velocityView;
     private int velocityW = -1;
     private int velocityH = -1;
+    private boolean velocityValid;
 
     private UpscaleManager() {
     }
@@ -193,8 +197,11 @@ public final class UpscaleManager {
             if (this.active == Upscaler.TAAU) {
                 this.applyJitter(internal[0], internal[1]);
             } else {
-                // Not using TAAU - ensure camera projection is clean
+                // Not using TAAU - ensure camera projection is clean and drop the
+                // temporal pose so re-enabling TAAU does not reproject from a stale frame.
                 this.restoreCameraProjection();
+                this.hasPreviousRotation = false;
+                this.velocityValid = false;
             }
             return this.worldTarget;
         }
@@ -267,11 +274,14 @@ public final class UpscaleManager {
         try {
             CameraRenderState camera;
             GpuTextureView source = this.worldTarget.getColorTextureView();
+            this.velocityValid = false;
             if (this.active == Upscaler.TAAU && this.jitterValid && (camera = Minecraft.getInstance().gameRenderer.gameRenderState().levelRenderState.cameraRenderState) != null) {
                 this.rotationScratch.rotation((Quaternionfc)this.rotationQuat.setFromNormalized((Matrix4fc)camera.viewRotationMatrix));
+                this.currentCameraPos.set((float)camera.pos.x, (float)camera.pos.y, (float)camera.pos.z);
                 if (!this.hasPreviousRotation) {
                     this.previousRotation.set((Matrix4fc)this.rotationScratch);
-                    this.previousProjection.set(this.pristineProjection); // Store previous projection for motion vectors
+                    this.previousProjection.set(this.pristineProjection);
+                    this.previousCameraPos.set(this.currentCameraPos);
                     this.hasPreviousRotation = true;
                 }
                 // Use captured depth (saved before hands/always-on-top cleared it)
@@ -285,15 +295,16 @@ public final class UpscaleManager {
                 } else {
                     source = this.taau.resolve(RenderSystem.getDevice().createCommandEncoder(), source, this.worldTarget.width, this.worldTarget.height, this.pristineProjection, this.rotationScratch, this.previousRotation, 0.12f);
                 }
-                this.previousRotation.set((Matrix4fc)this.rotationScratch);
-                this.previousProjection.set(this.pristineProjection); // Update previous projection
                 if (this.taau.isBroken()) {
                     this.active = Upscaler.OFF;
                     this.restoreCameraProjection();
                     return;
                 }
-                // Compute motion vectors for frame generation
+                // Motion vectors need the previous pose, so build them before it is overwritten.
                 this.computeMotionVectors();
+                this.previousRotation.set((Matrix4fc)this.rotationScratch);
+                this.previousProjection.set(this.pristineProjection);
+                this.previousCameraPos.set(this.currentCameraPos);
             }
             this.jitterValid = false;
             // Restore clean camera projection for the next frame
@@ -418,7 +429,7 @@ public void captureDepth(RenderTarget source) {
         this.capturedDepthW != this.worldTarget.width ||
         this.capturedDepthH != this.worldTarget.height) {
         this.closeCapturedDepth();
-        int usage = 8;
+        int usage = 5; // USAGE_COPY_DST | USAGE_TEXTURE_BINDING
         this.capturedDepth = device.createTexture("upshift/captured-depth", usage, GpuFormat.D32_FLOAT, this.worldTarget.width, this.worldTarget.height, 1, 1);
         this.capturedDepthView = device.createTextureView(this.capturedDepth);
         this.capturedDepthW = this.worldTarget.width;
@@ -554,6 +565,7 @@ public void ensureWorldTarget(int width, int height) {
     }
 
     private void closeVelocity() {
+        this.velocityValid = false;
         if (this.velocityView != null) {
             this.velocityView.close();
             this.velocityView = null;
@@ -567,7 +579,11 @@ public void ensureWorldTarget(int width, int height) {
     }
 
     public GpuTextureView getVelocityView() {
-        return this.velocityView;
+        return this.velocityValid ? this.velocityView : null;
+    }
+
+    public boolean hasVelocity() {
+        return this.velocityValid && this.velocityView != null;
     }
 
     private void ensureVelocity(int width, int height) {
@@ -577,7 +593,7 @@ public void ensureWorldTarget(int width, int height) {
         this.closeVelocity();
         try {
             GpuDevice device = RenderSystem.getDevice();
-            this.velocityTexture = device.createTexture("upshift/velocity", 12, GpuFormat.RG16_FLOAT, width, height, 1, 1);
+            this.velocityTexture = device.createTexture("upshift/velocity", 12, GpuFormat.RGBA16_FLOAT, width, height, 1, 1);
             this.velocityView = device.createTextureView(this.velocityTexture);
             this.velocityW = width;
             this.velocityH = height;
@@ -588,14 +604,13 @@ public void ensureWorldTarget(int width, int height) {
     }
 
     /**
-     * Computes motion vectors using depth buffer and previous projection.
-     * Called after TAAU resolves, before FrameGenPresenter captures the world.
+     * Computes motion vectors from the captured depth buffer. Depth is reconstructed
+     * with the current projection and camera transform, then projected with the
+     * previous frame's projection and camera transform.
      */
     public void computeMotionVectors() {
-        if (!this.hasPreviousRotation || this.velocityView == null) {
-            return;
-        }
-        if (this.active != Upscaler.TAAU) {
+        this.velocityValid = false;
+        if (!this.hasPreviousRotation || this.active != Upscaler.TAAU || this.worldTarget == null) {
             return;
         }
         GpuTextureView depthTexture = this.getCapturedDepth();
@@ -607,16 +622,13 @@ public void ensureWorldTarget(int width, int height) {
             if (this.velocityView == null) {
                 return;
             }
-            // Compute motion vectors using depth + previous projection
             CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
             Matrix4f projInv = new Matrix4f(this.pristineProjection).invert();
-            Matrix4f prevProjInv = new Matrix4f(this.previousProjection).invert();
-            
-            this.taau.computeVelocity(encoder, depthTexture, this.velocityView, 
-                this.worldTarget.width, this.worldTarget.height,
-                this.pristineProjection, this.previousProjection,
+            this.taau.computeVelocity(encoder, depthTexture, this.velocityView,
+                projInv, this.previousProjection,
                 this.rotationScratch, this.previousRotation,
-                projInv, prevProjInv);
+                this.currentCameraPos, this.previousCameraPos);
+            this.velocityValid = true;
         }
         catch (Throwable t) {
             Upshift.LOG.error("could not compute motion vectors", t);

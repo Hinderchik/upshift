@@ -22,6 +22,7 @@ import java.util.Optional;
 import net.minecraft.resources.Identifier;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
+import org.joml.Vector3f;
 import org.lwjgl.system.MemoryUtil;
 
 public final class TaauPass {
@@ -70,12 +71,8 @@ public final class TaauPass {
             BindGroupLayout layout = BindGroupLayout.builder()
                 .withSampler("DepthSampler")
                 .withUniform("VelocityParams", UniformType.UNIFORM_BUFFER)
-                .withUniform("CurrentProjection", UniformType.UNIFORM_BUFFER)
-                .withUniform("PreviousProjection", UniformType.UNIFORM_BUFFER)
-                .withUniform("CurrentView", UniformType.UNIFORM_BUFFER)
-                .withUniform("PreviousView", UniformType.UNIFORM_BUFFER)
                 .build();
-            ColorTargetState target = new ColorTargetState(Optional.empty(), GpuFormat.RG16_FLOAT, 15);
+            ColorTargetState target = new ColorTargetState(Optional.empty(), GpuFormat.RGBA16_FLOAT, 15);
             velocityPipeline = RenderPipeline.builder((RenderPipeline.Snippet[])new RenderPipeline.Snippet[0])
                 .withLocation(Identifier.parse((String)"upshift:pipeline/velocity"))
                 .withVertexShader(Identifier.parse((String)"upshift:core/screenquad"))
@@ -225,37 +222,43 @@ public final class TaauPass {
         if (this.velocityParams != null) {
             return;
         }
-        this.velocityData = MemoryUtil.memAlloc(64 * 5); // 5 matrices = 320 bytes
-        this.velocityParams = RenderSystem.getDevice().createBuffer(() -> "upshift/taau-velocity-params", 136 * 5, this.velocityData);
+        // 4 matrices + two positions + params: 4*64 + 3*16 = 304 bytes
+        this.velocityData = MemoryUtil.memAlloc(304);
+        this.velocityParams = RenderSystem.getDevice().createBuffer(() -> "upshift/taau-velocity-params", 136, this.velocityData);
     }
 
     /**
-     * Computes motion vectors from depth buffer using previous and current projections.
-     * Outputs to velocity texture (RG16_FLOAT: motion vector in UV space).
+     * Computes per-pixel motion vectors from the depth buffer.
+     *
+     * <p>The depth sample is reconstructed into world space with the current
+     * projection/rotation, moved into the previous view with the previous
+     * rotation and camera position, and projected with the previous projection.
+     * The result is the UV-space offset from the current pixel to the pixel it
+     * came from in the previous frame.</p>
      */
     public void computeVelocity(CommandEncoder encoder, GpuTextureView depthTexture, GpuTextureView velocityTexture,
-                                int width, int height,
-                                Matrix4f currentProjection, Matrix4f previousProjection,
-                                Matrix4f currentView, Matrix4f previousView,
-                                Matrix4f currentProjInv, Matrix4f previousProjInv) {
+                                Matrix4f currentProjectionInverse, Matrix4f previousProjection,
+                                Matrix4f currentRotation, Matrix4f previousRotation,
+                                Vector3f currentCameraPos, Vector3f previousCameraPos) {
         if (this.broken[0] || depthTexture == null || velocityTexture == null) {
             return;
         }
         try {
             this.ensureVelocityBuffer();
-            
-            // Upload matrices to uniform buffer
+
             this.velocityData.clear();
-            currentProjection.get(0, this.velocityData);
+            currentProjectionInverse.get(0, this.velocityData);
             this.velocityData.position(64);
             previousProjection.get(0, this.velocityData);
             this.velocityData.position(128);
-            currentView.get(0, this.velocityData);
+            currentRotation.get(0, this.velocityData);
             this.velocityData.position(192);
-            previousView.get(0, this.velocityData);
+            previousRotation.get(0, this.velocityData);
             this.velocityData.position(256);
-            currentProjInv.get(0, this.velocityData);
-            this.velocityData.position(0).limit(320);
+            this.velocityData.putFloat(currentCameraPos.x).putFloat(currentCameraPos.y).putFloat(currentCameraPos.z).putFloat(0.0f);
+            this.velocityData.putFloat(previousCameraPos.x).putFloat(previousCameraPos.y).putFloat(previousCameraPos.z).putFloat(0.0f);
+            this.velocityData.putFloat(this.zZeroToOne ? 1.0f : 0.0f).putFloat(0.0f).putFloat(0.0f).putFloat(0.0f);
+            this.velocityData.position(0).limit(304);
             encoder.writeToBuffer(this.velocityParams.slice(), this.velocityData);
 
             GpuSampler sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST);
