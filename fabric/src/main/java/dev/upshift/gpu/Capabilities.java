@@ -86,14 +86,7 @@ public final class Capabilities {
         } else {
             frameGens.add(new CapabilityReport.Row<FrameGen>(FrameGen.XESS_FG, CapabilityReport.State.UNSUPPORTED, "XeSS frame generation needs Intel XMX hardware; this GPU is " + String.valueOf((Object)gpu.vendor()) + " " + String.valueOf((Object)gpu.family())));
         }
-        if (AnrDetector.isSupported()) {
-            String detail = AnrDownloader.isInstalled()
-                ? "ANR FG " + String.valueOf((Object)AnrDownloader.installedVersion()) + " is staged; run its install.cmd against the game's .exe and restart"
-                : "ANR FG is supported on this GPU; the official package is downloaded from the frame generation page after confirmation";
-            frameGens.add(new CapabilityReport.Row<FrameGen>(FrameGen.ANR, CapabilityReport.State.BLOCKED, detail));
-        } else {
-            frameGens.add(new CapabilityReport.Row<FrameGen>(FrameGen.ANR, CapabilityReport.State.UNSUPPORTED, "ANR FG needs an RTX 20 series or newer, GTX 16, RX 5000 or newer, Intel Arc or Steam Deck GPU; " + AnrDetector.getReason()));
-        }
+        // ANR FG is experimental-only and not offered on CurseForge builds.
         return new CapabilityReport(gpu, backend, deviceName, vendor, driver, List.copyOf(upscalers), List.copyOf(frameGens));
     }
 

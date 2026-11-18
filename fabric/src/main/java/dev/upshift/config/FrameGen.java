@@ -5,8 +5,7 @@ public enum FrameGen {
     INTERNAL("internal", "built-in interpolation between rendered frames"),
     FSR_FG("fsr_fg", "FidelityFX FrameInterpolation (FidelityFX SDK)"),
     DLSS_FG("dlss_fg", "NGX DLSS-G / DLSS multi frame generation"),
-    XESS_FG("xess_fg", "XeSS-FG (XeFG 2.x)"),
-    ANR("anr", "AMD FidelityFX Frame Generation (open source, on-demand download)");
+    XESS_FG("xess_fg", "XeSS-FG (XeFG 2.x)");
 
     private final String id;
     private final String requirement;
@@ -25,11 +24,7 @@ public enum FrameGen {
     }
 
     public boolean needsNativeRuntime() {
-        return this == FSR_FG || this == DLSS_FG || this == XESS_FG || this == ANR;
-    }
-
-    public boolean needsDownload() {
-        return this == ANR;
+        return this == FSR_FG || this == DLSS_FG || this == XESS_FG;
     }
 
     public static FrameGen byId(String id) {

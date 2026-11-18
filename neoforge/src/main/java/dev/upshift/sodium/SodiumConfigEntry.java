@@ -5,8 +5,6 @@ import dev.upshift.config.FrameGen;
 import dev.upshift.config.FsrConfig;
 import dev.upshift.config.QualityMode;
 import dev.upshift.config.Upscaler;
-import dev.upshift.gpu.AnrDetector;
-import dev.upshift.gpu.AnrDownloader;
 import dev.upshift.gpu.Capabilities;
 import dev.upshift.gpu.CapabilityReport;
 import dev.upshift.overlay.OverlayMode;
@@ -43,8 +41,6 @@ implements ConfigEntryPoint {
     private static final Identifier EXPERIMENTAL_ID = Identifier.parse((String)"upshift:experimental_backends");
     private static final Identifier FRAMEGEN_ID = Identifier.parse((String)"upshift:frame_gen");
     private static final Identifier FG_MULTIPLIER_ID = Identifier.parse((String)"upshift:fg_multiplier");
-    private static final Identifier ANR_DOWNLOAD_ID = Identifier.parse((String)"upshift:anr_download");
-    private static final Identifier ANR_FOLDER_ID = Identifier.parse((String)"upshift:anr_folder");
     private static final Identifier OVERLAY_ID = Identifier.parse((String)"upshift:debug_overlay");
     private static final Identifier PROFILE_ID = Identifier.parse((String)"upshift:profile");
     private static final Identifier REPORT_ID = Identifier.parse((String)"upshift:report");
@@ -288,51 +284,11 @@ implements ConfigEntryPoint {
                         .setTooltip(Component.translatable("upshift.tooltip.report"))
                         .setScreenConsumer(screen -> this.dumpReport()));
 
-        // Group 4: ANR specific (only when GPU supported)
-        OptionGroupBuilder anrGroup = builder.createOptionGroup()
-                .setName(Component.translatable("upshift.group.anr"));
-        if (AnrDetector.isSupported()) {
-            Upshift.LOG.info("ANR FG offered: {}", AnrDetector.getReason());
-            if (AnrDownloader.isInstalled()) {
-                if (AnrDownloader.isLayerInstalled()) {
-                    anrGroup.addOption(builder.createExternalButtonOption(ANR_FOLDER_ID)
-                            .setName(Component.translatable("upshift.option.anr_layer_active"))
-                            .setTooltip(Component.translatable("upshift.tooltip.anr_layer_active",
-                                    AnrDownloader.installedVersion()))
-                            .setScreenConsumer(screen -> this.openAnrFolder()));
-                    anrGroup.addOption(builder.createExternalButtonOption(ANR_FOLDER_ID)
-                            .setName(Component.translatable("upshift.option.anr_uninstall"))
-                            .setTooltip(Component.translatable("upshift.tooltip.anr_uninstall"))
-                            .setScreenConsumer(screen -> {
-                                AnrDownloader.uninstallLayer();
-                                this.notifyPlayer(Component.translatable("upshift.anr.uninstalled").withStyle(ChatFormatting.YELLOW));
-                            }));
-                } else {
-                    anrGroup.addOption(builder.createExternalButtonOption(ANR_DOWNLOAD_ID)
-                            .setName(Component.translatable("upshift.option.anr_install_layer"))
-                            .setTooltip(Component.translatable("upshift.tooltip.anr_install_layer"))
-                            .setScreenConsumer(this::askAnrConsent));
-                }
-            } else {
-                anrGroup.addOption(builder.createExternalButtonOption(ANR_DOWNLOAD_ID)
-                        .setName(Component.translatable("upshift.option.anr_download"))
-                        .setTooltip(Component.translatable("upshift.tooltip.anr_download"))
-                        .setScreenConsumer(this::askAnrConsent));
-            }
-        } else {
-            anrGroup.addOption(builder.createExternalButtonOption(ANR_DOWNLOAD_ID)
-                    .setName(Component.translatable("upshift.option.anr_unsupported"))
-                    .setTooltip(Component.translatable("upshift.tooltip.anr_unsupported",
-                            AnrDetector.getReason()))
-                    .setEnabled(false));
-        }
-
         modOptions.addPage(builder.createOptionPage()
                 .setName(Component.translatable("upshift.page.frame_gen"))
                 .addOptionGroup(availableFgGroup)
                 .addOptionGroup(unavailableFgGroup)
-                .addOptionGroup(fgSettingsGroup)
-                .addOptionGroup(anrGroup));
+                .addOptionGroup(fgSettingsGroup));
         modOptions.addPage(builder.createOptionPage()
                 .setName(Component.translatable("upshift.page.optimizations"))
                 .addOptionGroup(builder.createOptionGroup()
@@ -517,13 +473,7 @@ implements ConfigEntryPoint {
                 FrameGen frameGen = (FrameGen)value;
                 CapabilityReport.Row<FrameGen> row = Capabilities.report().row(frameGen);
                 if (row.state() == CapabilityReport.State.BLOCKED) {
-                    String suffix;
-                    if (frameGen == FrameGen.ANR) {
-                        suffix = AnrDownloader.isInstalled() ? " - package staged" : " - download needed";
-                    } else {
-                        suffix = " - needs native core";
-                    }
-                    return Component.literal(frameGenLabel(frameGen) + suffix);
+                    return Component.literal(frameGenLabel(frameGen) + " - needs native core");
                 }
                 return Component.literal(frameGenLabel(frameGen));
             }
@@ -572,47 +522,7 @@ implements ConfigEntryPoint {
             case FSR_FG -> "FSR frame generation";
             case DLSS_FG -> "DLSS frame generation";
             case XESS_FG -> "XeSS frame generation";
-            case ANR -> "ANR FG (external add-on)";
         };
-    }
-
-    /**
-     * Shows the consent screen before anything is downloaded. The player has to press
-     * "Download" in that screen; closing it or pressing "Cancel" leaves the mod untouched.
-     */
-    private void askAnrConsent(Screen parent) {
-        Minecraft minecraft = Minecraft.getInstance();
-        ConfirmScreen consent = new ConfirmScreen(accepted -> {
-            minecraft.setScreenAndShow(parent);
-            if (!accepted) {
-                return;
-            }
-            AnrDownloader.giveConsent();
-            this.notifyPlayer(Component.translatable("upshift.anr.started").withStyle(ChatFormatting.AQUA));
-            AnrDownloader.ensureDownloaded().thenAccept(success -> minecraft.execute(() -> {
-                if (success) {
-                    this.notifyPlayer(Component.translatable("upshift.anr.done", AnrDownloader.getInstallDirectory().toString()).withStyle(ChatFormatting.GREEN));
-                } else {
-                    this.notifyPlayer(Component.translatable("upshift.anr.failed", AnrDownloader.getLastError()).withStyle(ChatFormatting.RED));
-                }
-            }));
-        },
-            Component.translatable("upshift.anr.consent.title"),
-            Component.translatable("upshift.anr.consent.message"),
-            Component.translatable("upshift.anr.consent.yes"),
-            Component.translatable("upshift.anr.consent.no"));
-        // setDelay() must be called AFTER init() (which creates yesButton/noButton),
-        // but we can't hook into that here. Skip it; the explicit consent is sufficient.
-        minecraft.setScreenAndShow(consent);
-    }
-
-    private void openAnrFolder() {
-        Path directory = AnrDownloader.getInstallDirectory();
-        try {
-            Util.getPlatform().openPath(directory);
-        } catch (Throwable t) {
-            Upshift.LOG.warn("could not open the ANR folder {}", directory, t);
-        }
     }
 
     private void notifyPlayer(Component message) {

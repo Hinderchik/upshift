@@ -23,8 +23,6 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import dev.upshift.Upshift;
 import dev.upshift.config.FrameGen;
 import dev.upshift.config.FsrConfig;
-import dev.upshift.gpu.AnrDetector;
-import dev.upshift.gpu.AnrDownloader;
 import dev.upshift.overlay.PerfStats;
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -373,23 +371,6 @@ public final class FrameGenPresenter {
             if (config.frameGenMultiplier <= 1) {
                 return false;
             }
-        }
-        // ANR (on-demand download)
-        else if (config.frameGen == FrameGen.ANR) {
-            if (!AnrDetector.isSupported()) {
-                Upshift.LOG.info("ANR selected but GPU not supported: {}", AnrDetector.getReason());
-                return false;
-            }
-            // Check if downloaded and ready
-            if (AnrDownloader.getState() != dev.upshift.gpu.AnrDownloader.DownloadState.COMPLETED) {
-                // Auto-start download if user consented
-                if (AnrDownloader.hasUserConsented()) {
-                    AnrDownloader.ensureDownloaded();
-                }
-                return false; // Not ready yet
-            }
-            // TODO: Integrate with native ANR when library is available
-            return false;
         }
         // Other external generators (FSR_FG, DLSS_FG, XESS_FG) - handled by native runtime
         else if (config.frameGen.needsNativeRuntime()) {
