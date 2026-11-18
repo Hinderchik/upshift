@@ -624,11 +624,10 @@ public void ensureWorldTarget(int width, int height) {
             }
             CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
             Matrix4f projInv = new Matrix4f(this.pristineProjection).invert();
-            this.taau.computeVelocity(encoder, depthTexture, this.velocityView,
+            this.velocityValid = this.taau.computeVelocity(encoder, depthTexture, this.velocityView,
                 projInv, this.previousProjection,
                 this.rotationScratch, this.previousRotation,
                 this.currentCameraPos, this.previousCameraPos);
-            this.velocityValid = true;
         }
         catch (Throwable t) {
             Upshift.LOG.error("could not compute motion vectors", t);

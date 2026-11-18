@@ -236,12 +236,12 @@ public final class TaauPass {
      * The result is the UV-space offset from the current pixel to the pixel it
      * came from in the previous frame.</p>
      */
-    public void computeVelocity(CommandEncoder encoder, GpuTextureView depthTexture, GpuTextureView velocityTexture,
+    public boolean computeVelocity(CommandEncoder encoder, GpuTextureView depthTexture, GpuTextureView velocityTexture,
                                 Matrix4f currentProjectionInverse, Matrix4f previousProjection,
                                 Matrix4f currentRotation, Matrix4f previousRotation,
                                 Vector3f currentCameraPos, Vector3f previousCameraPos) {
         if (this.broken[0] || depthTexture == null || velocityTexture == null) {
-            return;
+            return false;
         }
         try {
             this.ensureVelocityBuffer();
@@ -268,9 +268,11 @@ public final class TaauPass {
                 pass.setUniform("VelocityParams", this.velocityParams);
                 pass.draw(3, 1, 0, 0);
             }
+            return true;
         }
         catch (Throwable t) {
             Upshift.LOG.error("velocity pass failed", t);
+            return false;
         }
     }
 
