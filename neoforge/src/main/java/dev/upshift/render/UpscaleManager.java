@@ -46,6 +46,7 @@ public final class UpscaleManager {
     public static final float[][] JITTER = new float[][]{{0.5f, 0.333f}, {0.25f, 0.667f}, {0.75f, 0.111f}, {0.125f, 0.444f}, {0.625f, 0.778f}, {0.375f, 0.222f}, {0.875f, 0.556f}, {0.062f, 0.889f}};
     public final Matrix4f pristineProjection = new Matrix4f();
     public final Matrix4f previousRotation = new Matrix4f();
+    public final Matrix4f previousProjection = new Matrix4f(); // NEW: store previous projection for motion vectors
     public final Matrix4f rotationScratch = new Matrix4f();
     public final Quaternionf rotationQuat = new Quaternionf();
     public final int[] sizeScratch = new int[2];
@@ -75,6 +76,12 @@ public final class UpscaleManager {
     public int measurePhase;
     public boolean warnedNotWired;
     public boolean loggedActive;
+
+    // Motion vectors
+    private GpuTexture velocityTexture;
+    private GpuTextureView velocityView;
+    private int velocityW = -1;
+    private int velocityH = -1;
 
     private UpscaleManager() {
     }
@@ -264,6 +271,7 @@ public final class UpscaleManager {
                 this.rotationScratch.rotation((Quaternionfc)this.rotationQuat.setFromNormalized((Matrix4fc)camera.viewRotationMatrix));
                 if (!this.hasPreviousRotation) {
                     this.previousRotation.set((Matrix4fc)this.rotationScratch);
+                    this.previousProjection.set(this.pristineProjection); // Store previous projection for motion vectors
                     this.hasPreviousRotation = true;
                 }
                 // Use captured depth (saved before hands/always-on-top cleared it)
@@ -278,11 +286,14 @@ public final class UpscaleManager {
                     source = this.taau.resolve(RenderSystem.getDevice().createCommandEncoder(), source, this.worldTarget.width, this.worldTarget.height, this.pristineProjection, this.rotationScratch, this.previousRotation, 0.12f);
                 }
                 this.previousRotation.set((Matrix4fc)this.rotationScratch);
+                this.previousProjection.set(this.pristineProjection); // Update previous projection
                 if (this.taau.isBroken()) {
                     this.active = Upscaler.OFF;
                     this.restoreCameraProjection();
                     return;
                 }
+                // Compute motion vectors for frame generation
+                this.computeMotionVectors();
             }
             this.jitterValid = false;
             // Restore clean camera projection for the next frame
@@ -519,6 +530,7 @@ public void ensureWorldTarget(int width, int height) {
     public void close() {
         this.closeIntermediate();
         this.closeCapturedDepth();
+        this.closeVelocity();
         this.taau.close();
         this.hasPreviousRotation = false;
         this.hasPresented = false;
@@ -539,6 +551,76 @@ public void ensureWorldTarget(int width, int height) {
         this.retired.clear();
         this.worldW = -1;
         this.worldH = -1;
+    }
+
+    private void closeVelocity() {
+        if (this.velocityView != null) {
+            this.velocityView.close();
+            this.velocityView = null;
+        }
+        if (this.velocityTexture != null) {
+            this.velocityTexture.close();
+            this.velocityTexture = null;
+        }
+        this.velocityW = -1;
+        this.velocityH = -1;
+    }
+
+    public GpuTextureView getVelocityView() {
+        return this.velocityView;
+    }
+
+    private void ensureVelocity(int width, int height) {
+        if (this.velocityView != null && this.velocityW == width && this.velocityH == height) {
+            return;
+        }
+        this.closeVelocity();
+        try {
+            GpuDevice device = RenderSystem.getDevice();
+            this.velocityTexture = device.createTexture("upshift/velocity", 12, GpuFormat.RG16_FLOAT, width, height, 1, 1);
+            this.velocityView = device.createTextureView(this.velocityTexture);
+            this.velocityW = width;
+            this.velocityH = height;
+        }
+        catch (Throwable t) {
+            Upshift.LOG.error("could not allocate velocity texture", t);
+        }
+    }
+
+    /**
+     * Computes motion vectors using depth buffer and previous projection.
+     * Called after TAAU resolves, before FrameGenPresenter captures the world.
+     */
+    public void computeMotionVectors() {
+        if (!this.hasPreviousRotation || this.velocityView == null) {
+            return;
+        }
+        if (this.active != Upscaler.TAAU) {
+            return;
+        }
+        GpuTextureView depthTexture = this.getCapturedDepth();
+        if (depthTexture == null) {
+            return;
+        }
+        try {
+            this.ensureVelocity(this.worldTarget.width, this.worldTarget.height);
+            if (this.velocityView == null) {
+                return;
+            }
+            // Compute motion vectors using depth + previous projection
+            CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
+            Matrix4f projInv = new Matrix4f(this.pristineProjection).invert();
+            Matrix4f prevProjInv = new Matrix4f(this.previousProjection).invert();
+            
+            this.taau.computeVelocity(encoder, depthTexture, this.velocityView, 
+                this.worldTarget.width, this.worldTarget.height,
+                this.pristineProjection, this.previousProjection,
+                this.rotationScratch, this.previousRotation,
+                projInv, prevProjInv);
+        }
+        catch (Throwable t) {
+            Upshift.LOG.error("could not compute motion vectors", t);
+        }
     }
 
     private static final class CachedTarget {

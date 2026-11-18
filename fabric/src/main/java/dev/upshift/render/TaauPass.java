@@ -26,6 +26,7 @@ import org.lwjgl.system.MemoryUtil;
 
 public final class TaauPass {
     private static RenderPipeline pipeline;
+    private static RenderPipeline velocityPipeline;
     private GpuTexture[] textures = new GpuTexture[2];
     private GpuTextureView[] views = new GpuTextureView[2];
     private int width = -1;
@@ -35,8 +36,10 @@ public final class TaauPass {
     private boolean hasHistory;
     private GpuBuffer params;
     private GpuBuffer projectionInverseBuffer;
+    private GpuBuffer velocityParams;
     private final ByteBuffer data = MemoryUtil.memAlloc((int)80);
     private ByteBuffer projectionInverseData;
+    private ByteBuffer velocityData;
     private final boolean[] broken = new boolean[1];
     private boolean zZeroToOne;
     private final Matrix4f warp = new Matrix4f();
@@ -63,7 +66,27 @@ public final class TaauPass {
                 .withCull(false)
                 .build();
         }
-        return List.of(pipeline);
+        if (velocityPipeline == null) {
+            BindGroupLayout layout = BindGroupLayout.builder()
+                .withSampler("DepthSampler")
+                .withUniform("VelocityParams", UniformType.UNIFORM_BUFFER)
+                .withUniform("CurrentProjection", UniformType.UNIFORM_BUFFER)
+                .withUniform("PreviousProjection", UniformType.UNIFORM_BUFFER)
+                .withUniform("CurrentView", UniformType.UNIFORM_BUFFER)
+                .withUniform("PreviousView", UniformType.UNIFORM_BUFFER)
+                .build();
+            ColorTargetState target = new ColorTargetState(Optional.empty(), GpuFormat.RG16_FLOAT, 15);
+            velocityPipeline = RenderPipeline.builder((RenderPipeline.Snippet[])new RenderPipeline.Snippet[0])
+                .withLocation(Identifier.parse((String)"upshift:pipeline/velocity"))
+                .withVertexShader(Identifier.parse((String)"upshift:core/screenquad"))
+                .withFragmentShader(Identifier.parse((String)"upshift:core/velocity"))
+                .withBindGroupLayout(layout)
+                .withColorTargetState(target)
+                .withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
+                .withCull(false)
+                .build();
+        }
+        return List.of(pipeline, velocityPipeline);
     }
 
     public GpuTextureView lastOutput() {
@@ -198,6 +221,56 @@ public final class TaauPass {
         this.lastOutput = null;
     }
 
+    private void ensureVelocityBuffer() {
+        if (this.velocityParams != null) {
+            return;
+        }
+        this.velocityData = MemoryUtil.memAlloc(64 * 5); // 5 matrices = 320 bytes
+        this.velocityParams = RenderSystem.getDevice().createBuffer(() -> "upshift/taau-velocity-params", 136 * 5, this.velocityData);
+    }
+
+    /**
+     * Computes motion vectors from depth buffer using previous and current projections.
+     * Outputs to velocity texture (RG16_FLOAT: motion vector in UV space).
+     */
+    public void computeVelocity(CommandEncoder encoder, GpuTextureView depthTexture, GpuTextureView velocityTexture,
+                                int width, int height,
+                                Matrix4f currentProjection, Matrix4f previousProjection,
+                                Matrix4f currentView, Matrix4f previousView,
+                                Matrix4f currentProjInv, Matrix4f previousProjInv) {
+        if (this.broken[0] || depthTexture == null || velocityTexture == null) {
+            return;
+        }
+        try {
+            this.ensureVelocityBuffer();
+            
+            // Upload matrices to uniform buffer
+            this.velocityData.clear();
+            currentProjection.get(0, this.velocityData);
+            this.velocityData.position(64);
+            previousProjection.get(0, this.velocityData);
+            this.velocityData.position(128);
+            currentView.get(0, this.velocityData);
+            this.velocityData.position(192);
+            previousView.get(0, this.velocityData);
+            this.velocityData.position(256);
+            currentProjInv.get(0, this.velocityData);
+            this.velocityData.position(0).limit(320);
+            encoder.writeToBuffer(this.velocityParams.slice(), this.velocityData);
+
+            GpuSampler sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST);
+            try (RenderPass pass = encoder.createRenderPass(() -> "upshift/velocity", velocityTexture, Optional.empty())) {
+                pass.setPipeline(velocityPipeline);
+                pass.bindTexture("DepthSampler", depthTexture, sampler);
+                pass.setUniform("VelocityParams", this.velocityParams);
+                pass.draw(3, 1, 0, 0);
+            }
+        }
+        catch (Throwable t) {
+            Upshift.LOG.error("velocity pass failed", t);
+        }
+    }
+
     public void close() {
         this.closeAll();
         if (this.params != null) {
@@ -211,6 +284,14 @@ public final class TaauPass {
         if (this.projectionInverseData != null) {
             MemoryUtil.memFree(this.projectionInverseData);
             this.projectionInverseData = null;
+        }
+        if (this.velocityParams != null) {
+            this.velocityParams.close();
+            this.velocityParams = null;
+        }
+        if (this.velocityData != null) {
+            MemoryUtil.memFree(this.velocityData);
+            this.velocityData = null;
         }
     }
 }

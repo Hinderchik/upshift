@@ -111,6 +111,7 @@ public final class FrameGenPresenter {
                 .withSampler("InSampler")
                 .withSampler("GuiSampler")
                 .withSampler("WorldSampler")
+                .withSampler("MotionSampler")
                 .withUniform("WarpParams", UniformType.UNIFORM_BUFFER)
                 .build();
             ColorTargetState target = new ColorTargetState(Optional.empty(), GpuFormat.RGBA8_UNORM, 15);
@@ -194,6 +195,8 @@ public final class FrameGenPresenter {
             int previous = 1 - this.slot;
             GpuTextureView sourceView = this.worldView[previous];
             GpuTextureView maskView = this.worldView[this.slot];
+            // Get motion vectors from UpscaleManager
+            GpuTextureView motionView = UpscaleManager.get().getVelocityView();
             if (sourceView == null || maskView == null || !this.ensureOutput(width, height)) {
                 blit.blit(surface, encoder, realView);
                 return;
@@ -255,6 +258,9 @@ public final class FrameGenPresenter {
                     pass.bindTexture("InSampler", sourceView, sampler);
                     pass.bindTexture("GuiSampler", realView, sampler);
                     pass.bindTexture("WorldSampler", maskView, sampler);
+                    if (motionView != null) {
+                        pass.bindTexture("MotionSampler", motionView, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+                    }
                     pass.setUniform("WarpParams", this.warpBuffer);
                     pass.draw(3, 1, 0, 0);
                 }
